@@ -186,7 +186,8 @@ NTSTATUS driver_main(PDRIVER_OBJECT driver_object, PUNICODE_STRING registry_path
 
 
 
-
+VOID CleanUnloadedDrivers();
+VOID CleanPiDDBCacheTable();
 
 extern "C" NTSTATUS DriverEntry(PDRIVER_OBJECT Driver, PUNICODE_STRING RegistryPath)
 {
@@ -204,11 +205,38 @@ extern "C" NTSTATUS DriverEntry(PDRIVER_OBJECT Driver, PUNICODE_STRING RegistryP
 	UNICODE_STRING driver_name = {};
 	RtlInitUnicodeString(&driver_name, L"\\Driver\\UC");
 
+	CleanUnloadedDrivers();
+	CleanPiDDBCacheTable();
+
+
 	
 
 	return IoCreateDriver(&driver_name, &driver_main);
 
 }
+
+
+VOID CleanUnloadedDrivers() {
+	UNICODE_STRING usMmUnloadedDrivers;
+	RtlInitUnicodeString(&usMmUnloadedDrivers, L"MmUnloadedDrivers");
+
+	PUCHAR MmUnloadedDrivers = (PUCHAR)MmGetSystemRoutineAddress(&usMmUnloadedDrivers);
+	if (MmUnloadedDrivers) {
+		RtlZeroMemory(MmUnloadedDrivers, 0x200);
+	}
+}
+
+VOID CleanPiDDBCacheTable() {
+	UNICODE_STRING usPiDDBCacheTable;
+	RtlInitUnicodeString(&usPiDDBCacheTable, L"PiDDBCacheTable");
+
+	PUCHAR PiDDBCacheTable = (PUCHAR)MmGetSystemRoutineAddress(&usPiDDBCacheTable);
+	if (PiDDBCacheTable) {
+		RtlZeroMemory(PiDDBCacheTable, 0x100);
+	}
+}
+
+
 
 
 extern "C" NTSYSCALLAPI

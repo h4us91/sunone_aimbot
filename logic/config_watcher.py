@@ -14,7 +14,15 @@ class Config():
         except FileNotFoundError:
             print("Config file not found!")
             quit()
-            
+        
+        aim_profiles = {
+            "head": 0.94,        # Center of the head
+            "neck": 0.50,        # Neck area
+            "chest": 0.20,       # Chest area
+            "stomach": 0.00      # Stomach area
+        }
+        
+                    
         # Detection window
         self.config_Detection_window = self.config["Detection window"]
         self.detection_window_width = int(self.config_Detection_window["detection_window_width"])
@@ -37,7 +45,13 @@ class Config():
         self.Obs_capture_fps = int(self.config_Obs_capture["Obs_capture_fps"])
         # Aim
         self.config_Aim = self.config["Aim"]
-        self.body_y_offset = float(self.config_Aim["body_y_offset"])
+
+        profile_name = self.config_Aim["body_y_offset"].lower()
+        if profile_name not in aim_profiles:
+            print(f"[WARNING] Invalid body_y_offset value '{profile_name}', using default 'neck'.")
+            profile_name = "neck"
+        self.body_y_offset = aim_profiles[profile_name]
+
         self.hideout_targets = self.config_Aim.getboolean("hideout_targets")
         self.disable_headshot = self.config_Aim.getboolean("disable_headshot")
         self.disable_prediction = self.config_Aim.getboolean("disable_prediction")
@@ -62,6 +76,10 @@ class Config():
         self.mouse_auto_aim = self.config_Mouse.getboolean("mouse_auto_aim")
         self.mouse_ghub = self.config_Mouse.getboolean("mouse_ghub")
         self.mouse_rzr = self.config_Mouse.getboolean("mouse_rzr")
+        self.kernel_bypass = self.config_Mouse.getboolean("kernel_bypass")
+        self.silent_aim = self.config_Aim.getboolean("silent_aim")
+
+
         # Shooting
         self.config_Shooting = self.config["Shooting"]
         self.auto_shoot = self.config_Shooting.getboolean("auto_shoot")
@@ -84,6 +102,7 @@ class Config():
         self.AI_enable_AMD = self.config_AI.getboolean("AI_enable_AMD")
         self.AI_mouse_net = self.config_AI.getboolean("AI_mouse_net")
         self.disable_tracker = self.config_AI.getboolean("disable_tracker")
+        self.track_red_names_only = self.config_AI.getboolean("track_red_names_only")
         # Overlay
         self.config_overlay = self.config["overlay"]
         self.show_overlay = self.config_overlay.getboolean("show_overlay")

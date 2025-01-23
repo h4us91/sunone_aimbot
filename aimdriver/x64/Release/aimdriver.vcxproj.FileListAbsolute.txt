@@ -1,1 +1,2 @@
 C:\Users\H4uS\Desktop\UC\kernelmode\kernelmode\aimdriver\x64\Release\aimdriver.sys
+C:\Users\H4uS\Documents\Git\sunone_aimbot\aimdriver\x64\Release\aimdriver.sys

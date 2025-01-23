@@ -7,6 +7,11 @@ from logic.mouse import mouse
 from logic.shooting import shooting
 import supervision as sv
 import numpy as np
+import cv2
+
+
+
+
 
 class Target:
     def __init__(self, x, y, w, h, cls):
@@ -15,36 +20,101 @@ class Target:
         self.w = w
         self.h = h
         self.cls = cls
-
+        
+        
+        
 class FrameParser:
     def __init__(self):
         self.arch = self.get_arch()
 
     def parse(self, result):
+        image = capture.get_new_frame()  
+        if image is None:
+            return  
         if isinstance(result, sv.Detections):
-            self._process_sv_detections(result)
+            self._process_sv_detections(result, image)
         else:
-            self._process_yolo_detections(result)
+            self._process_yolo_detections(result, image)
 
-    def _process_sv_detections(self, detections):
-        if detections.xyxy.any():
-            target = self.sort_targets(detections)
-            self._handle_target(target)
+    def _process_sv_detections(self, detections, image):
+        if detections is not None and detections.xyxy.any():
+            if cfg.track_red_names_only:
+                detections = self.filter_red_name_targets(detections, image)  
+            if detections is not None and detections.xyxy.any(): 
+                target = self.sort_targets(detections)
+                self._handle_target(target)
 
-    def _process_yolo_detections(self, results):
+    def _process_yolo_detections(self, results, image):
         for frame in results:
             if frame.boxes:
-                target = self.sort_targets(frame)
-                self._handle_target(target)
+                if cfg.track_red_names_only:
+                    red_name_targets = self.filter_red_name_targets(frame, image)  
+                    if red_name_targets is not None and red_name_targets.xyxy.any():  
+                        target = self.sort_targets(red_name_targets)
+                        self._handle_target(target)
+                else:
+                    target = self.sort_targets(frame)
+                    self._handle_target(target)
+
                 self._visualize_frame(frame)
+
+    def filter_red_name_targets(self, detections, image):
+        red_targets = [i for i, box in enumerate(detections.xyxy) if self.is_red_name(image, box)]
+
+        if not red_targets:
+            return None
+
+        return sv.Detections(
+            xyxy=detections.xyxy[red_targets],
+            confidence=detections.confidence[red_targets],
+            class_id=detections.class_id[red_targets],
+            tracker_id=detections.tracker_id[red_targets] if detections.tracker_id is not None else None,
+            data={key: val[red_targets] for key, val in detections.data.items()},
+            metadata=detections.metadata
+        )
+
+
+
+    def is_red_name(self, image, box, red_threshold=0.2):  # Threshold leicht gesenkt
+        x1, y1, x2, y2 = box[:4].astype(int)
+
+        # Größeren Namensbereich erfassen
+        name_height = int((y2 - y1) * 0.35)  # Erhöht auf 35%
+        name_y1 = max(0, y1 - name_height)  # Verhindert negative Werte
+        name_region = image[name_y1:y1, x1:x2]
+
+        if name_region.size == 0:
+            return False
+
+        hsv = cv2.cvtColor(name_region, cv2.COLOR_BGR2HSV)
+
+        # Erweiterter Rottönungsbereich
+        lower_red1 = np.array([0, 70, 50])  
+        upper_red1 = np.array([10, 255, 255])
+        lower_red2 = np.array([160, 70, 50])
+        upper_red2 = np.array([180, 255, 255])
+
+        mask1 = cv2.inRange(hsv, lower_red1, upper_red1)
+        mask2 = cv2.inRange(hsv, lower_red2, upper_red2)
+        mask = mask1 + mask2
+
+        red_pixel_ratio = cv2.countNonZero(mask) / (name_region.shape[0] * name_region.shape[1])
+
+        return red_pixel_ratio > red_threshold  # Senkt Threshold leicht auf 0.2
+
+
 
     def _handle_target(self, target):
         if target:
             if hotkeys_watcher.clss is None:
                 hotkeys_watcher.active_classes()
             
+            if cfg.third_person and target.cls == 10:
+                return
+
             if target.cls in hotkeys_watcher.clss:
                 mouse.process_data((target.x, target.y, target.w, target.h, target.cls))
+
 
     def _visualize_frame(self, frame):
         if cfg.show_window or cfg.show_overlay:

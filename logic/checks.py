@@ -62,8 +62,10 @@ def Warnings():
             print("WARNING: Using standard libraries for mouse moving such as `win32` or `Ghub driver` without bypassing, for example, how Arduino can speed up the account blocking process, use it at your own risk.")
         if cfg.arduino_shoot == False and cfg.auto_shoot:
             print("WARNING: Using standard libraries for mouse shooting such as `win32` or `Ghub driver` without bypassing, for example, how Arduino can speed up the account blocking process, use it at your own risk.")
-        
-        selected_methods = sum([cfg.arduino_move, cfg.mouse_ghub, cfg.mouse_rzr])
+        if cfg.kernel_bypass:
+            print("WARNING: Kernel Bypass is enabled. Ensure that the driver is correctly loaded using mapper.exe!")
+
+        selected_methods = sum([cfg.arduino_move, cfg.mouse_ghub, cfg.mouse_rzr, cfg.kernel_bypass])
         if selected_methods > 1:
             raise ValueError("WARNING: You use more than one mouse input method.")
         

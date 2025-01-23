@@ -4,11 +4,15 @@ import torch.nn as nn
 import time
 import math
 import os
+import ctypes
+import ctypes.wintypes
 import supervision as sv
+import subprocess
 from logic.config_watcher import cfg
 from logic.visual import visuals
 from logic.shooting import shooting
 from logic.buttons import Buttons
+import atexit
 
 # Conditional imports
 if cfg.mouse_rzr:
@@ -16,6 +20,17 @@ if cfg.mouse_rzr:
 
 if cfg.arduino_move or cfg.arduino_shoot:
     from logic.arduino import arduino
+
+# Konstanten definieren
+FILE_DEVICE_UNKNOWN = 0x22
+METHOD_BUFFERED = 0
+FILE_SPECIAL_ACCESS = 0x0
+
+def CTL_CODE(DeviceType, Function, Method, Access):
+    return (DeviceType << 16) | (Access << 14) | (Function << 2) | Method
+
+IOCTL_MOUSE_MOVE = CTL_CODE(FILE_DEVICE_UNKNOWN, 0x696, METHOD_BUFFERED, FILE_SPECIAL_ACCESS)
+
 
 class Mouse_net(nn.Module):
     def __init__(self, arch):
@@ -33,15 +48,25 @@ class Mouse_net(nn.Module):
     def forward(self, x):
         return self.layers(x)
 
+class Request(ctypes.Structure):
+    _fields_ = [
+        ("x", ctypes.c_long),
+        ("y", ctypes.c_long),
+        ("button_flags", ctypes.c_ushort)
+    ]
+
 class MouseThread:
     def __init__(self):
         self.initialize_parameters()
         self.setup_hardware()
         self.setup_ai()
+        self.driver_loaded = False  
+
 
     def initialize_parameters(self):
         self.dpi = cfg.mouse_dpi
         self.mouse_sensitivity = cfg.mouse_sensitivity
+        self.kernel_bypass = cfg.kernel_bypass
         self.fov_x = cfg.mouse_fov_width
         self.fov_y = cfg.mouse_fov_height
         self.disable_prediction = cfg.disable_prediction
@@ -63,6 +88,33 @@ class MouseThread:
         self.arch = self.get_arch()
         self.section_size_x = self.screen_width / 100
         self.section_size_y = self.screen_height / 100
+        
+        if self.kernel_bypass:
+            self.load_kernel_driver()
+            self.init_kernel_driver()
+    
+    def load_kernel_driver(self):
+        driver_path = os.path.join(os.path.dirname(__file__), 'data', 'driver.sys')
+        mapper_path = os.path.join(os.path.dirname(__file__), 'data', 'mapper.exe')
+        try:
+            result = subprocess.run([mapper_path, driver_path], capture_output=True, text=True)
+            if result.returncode == 0:
+                print("[INFO] Kernel Bypass: Treiber erfolgreich geladen.")
+                self.driver_loaded = True
+            else:
+                print(f"[ERROR] Kernel Bypass: Mapper.exe konnte den Treiber nicht laden. Fehler: {result.stderr}")
+                self.driver_loaded = False
+        except Exception as e:
+            print(f"[ERROR] Kernel Bypass: Fehler beim Starten von mapper.exe - {e}")
+            self.driver_loaded = False
+
+    def init_kernel_driver(self):
+        self.handle = ctypes.windll.kernel32.CreateFileW(
+            "\\\\.\\UC", 0xC0000000, 0, None, 3, 0, None
+        )
+        if self.handle == -1:
+            print("[ERROR] Kernel Bypass: Gerät konnte nicht geöffnet werden. Überprüfe, ob der Treiber mit mapper.exe geladen wurde.")
+            self.handle = None    
 
     def get_arch(self):
         if cfg.AI_enable_AMD:
@@ -149,13 +201,22 @@ class MouseThread:
 
         return predicted_x, predicted_y
 
+
+
     def calculate_speed_multiplier(self, target_x, target_y, distance):
+        # Ensure target_x and target_y are valid numbers
+        if math.isnan(target_x) or math.isnan(target_y):
+            return 1  # Return default multiplier to prevent crashing
+
         normalized_distance = min(distance / self.max_distance, 1)
         base_speed = self.min_speed_multiplier + (self.max_speed_multiplier - self.min_speed_multiplier) * (1 - normalized_distance)
 
-        target_x_section = int((target_x - self.center_x + self.screen_width / 2) / self.section_size_x)
-        target_y_section = int((target_y - self.center_y + self.screen_height / 2) / self.section_size_y)
-        
+        try:
+            target_x_section = int((target_x - self.center_x + self.screen_width / 2) / self.section_size_x)
+            target_y_section = int((target_y - self.center_y + self.screen_height / 2) / self.section_size_y)
+        except ValueError:
+            return 1  # Return default multiplier in case of invalid conversion
+
         distance_from_center = max(abs(50 - target_x_section), abs(50 - target_y_section))
 
         if distance_from_center == 0:
@@ -211,31 +272,50 @@ class MouseThread:
                 
             self.visualize_prediction(move[0] + self.center_x, move[1] + self.center_y, target_cls)
             return move[0], move[1]
-
-    def move_mouse(self, x, y):
-        if x == 0 and y == 0:
-            return
-
-        shooting_state = self.get_shooting_key_state()
-        mouse_aim = cfg.mouse_auto_aim
-        triggerbot = cfg.triggerbot
-
-        if shooting_state or mouse_aim:
-            if not cfg.mouse_ghub and not cfg.arduino_move and not cfg.mouse_rzr:
-                win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, int(x), int(y), 0, 0)
-            elif cfg.mouse_ghub:
-                self.ghub.mouse_xy(int(x), int(y))
-            elif cfg.arduino_move:
-                arduino.move(int(x), int(y))
-            elif cfg.mouse_rzr:
-                self.rzr.mouse_move(int(x), int(y), True)
-
+    
     def get_shooting_key_state(self):
         for key_name in cfg.hotkey_targeting_list:
             key_code = Buttons.KEY_CODES.get(key_name.strip())
             if key_code and (win32api.GetKeyState(key_code) if cfg.mouse_lock_target else win32api.GetAsyncKeyState(key_code)) < 0:
                 return True
         return False
+                
+    def move_mouse(self, x, y):
+        if x == 0 and y == 0:
+            return
+        
+        shooting = self.get_shooting_key_state()
+        mouse_aim = cfg.mouse_auto_aim
+        triggerbot = cfg.triggerbot
+
+        # Aimer nur aktiv, wenn rechte Maustaste gedrückt wird oder Auto-Aim aktiviert ist
+        if (shooting and not mouse_aim and not triggerbot) or mouse_aim:
+            x, y = int(x), int(y)
+
+            if self.kernel_bypass and self.handle:
+                request = Request(int(x), int(y), 0)
+                bytes_returned = ctypes.c_ulong(0)
+                result = ctypes.windll.kernel32.DeviceIoControl(
+                    self.handle, IOCTL_MOUSE_MOVE, ctypes.byref(request), ctypes.sizeof(request),
+                    ctypes.byref(request), ctypes.sizeof(request), ctypes.byref(bytes_returned), None
+                )
+                if result == 0:
+                    print("[ERROR] Kernel Bypass: DeviceIoControl fehlgeschlagen.")
+            else:
+                if not self.mouse_ghub and not self.arduino_move and not self.mouse_rzr:
+                    win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, x, y, 0, 0)
+                elif self.mouse_ghub:
+                    from logic.ghub import gHub
+                    gHub().mouse_xy(x, y)
+                elif self.mouse_rzr:
+                    from logic.rzctl import RZCONTROL
+                    self.rzr = RZCONTROL("rzctl.dll")
+                    self.rzr.mouse_move(x, y, True)
+                elif self.arduino_move:
+                    from logic.arduino import arduino
+                    arduino.move(x, y)
+
+  
 
     def check_target_in_scope(self, target_x, target_y, target_w, target_h, reduction_factor):
         reduced_w, reduced_h = target_w * reduction_factor / 2, target_h * reduction_factor / 2
@@ -247,6 +327,25 @@ class MouseThread:
         
         return bScope
 
+    
+    def close_driver(self):
+        if self.kernel_bypass and self.driver_loaded:
+            ctypes.windll.kernel32.CloseHandle(self.handle)
+            print("Kernel Bypass Handle geschlossen.")
+
+        
+        if self.kernel_bypass and self.driver_loaded:
+            print("[INFO] Versuche, den Kernel-Treiber zu entladen...")
+            mapper_path = os.path.join(os.path.dirname(__file__), 'data', 'mapper.exe')
+            try:
+                result = subprocess.run([mapper_path, '--free'], capture_output=True, text=True)
+                if result.returncode == 0:
+                    print("[INFO] Kernel-Treiber erfolgreich entladen.")
+                else:
+                    print(f"[ERROR] Kernel-Treiber konnte nicht entladen werden. Fehler: {result.stderr}")
+            except Exception as e:
+                print(f"[ERROR] Fehler beim Entladen des Kernel-Treibers - {e}")
+    
     def update_settings(self):
         # Update all configuration parameters here
         self.dpi = cfg.mouse_dpi
@@ -274,3 +373,4 @@ class MouseThread:
             visuals.draw_history_point_add_point(target_x, target_y)
 
 mouse = MouseThread()
+atexit.register(mouse.close_driver)
