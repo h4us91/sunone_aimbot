@@ -15,7 +15,7 @@ from logic.buttons import Buttons
 from logic.driver.driver_logic import IOCTL_MOUSE_MOVE, Request
 
 import atexit
-
+from logic.macro import Macro
 
 class Mouse_net(nn.Module):
     def __init__(self, arch):
@@ -35,12 +35,24 @@ class Mouse_net(nn.Module):
 
 class MouseThread:
     def __init__(self):
+        self.macro = None
+        if cfg.active_macro and cfg.active_macro.lower() != "none":
+            try:
+                self.macro = Macro()
+            except Exception as e:
+                print(f"Macro konnte nicht geladen werden: {e}")
+        self.last_macro_state = False  
         self.initialize_parameters()
         self.setup_hardware()
         self.setup_ai()
         self.driver_loaded = False  
 
-
+    def get_macro_hotkey_state(self):
+        if self.macro.hotkey:
+            key_code = Buttons.KEY_CODES.get(self.macro.hotkey.strip())
+            return key_code and win32api.GetAsyncKeyState(key_code) < 0
+        return False
+    
     def initialize_parameters(self):
         self.dpi = cfg.mouse_dpi
         self.mouse_sensitivity = cfg.mouse_sensitivity
@@ -133,7 +145,18 @@ class MouseThread:
                 exit()
             self.model.eval()
 
+    def handle_macro(self):
+        if not self.macro:
+            return
+        new_state = self.get_macro_hotkey_state()
+        if new_state and not self.last_macro_state:
+            self.macro.run_key_down()
+        elif not new_state and self.last_macro_state:
+            self.macro.run_key_up()
+        self.last_macro_state = new_state
+    
     def process_data(self, data):
+        self.handle_macro()
         if isinstance(data, sv.Detections):
             target_x, target_y = data.xyxy.mean(axis=1)
             target_w, target_h = data.xyxy[:, 2] - data.xyxy[:, 0], data.xyxy[:, 3] - data.xyxy[:, 1]
@@ -157,6 +180,7 @@ class MouseThread:
         shooting.queue.put((self.bScope, self.get_shooting_key_state()))
         self.move_mouse(move_x, move_y)
 
+    
     def predict_target_position(self, target_x, target_y, current_time):
         if self.prev_time is None:
             self.prev_time = current_time
