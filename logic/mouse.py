@@ -12,24 +12,9 @@ from logic.config_watcher import cfg
 from logic.visual import visuals
 from logic.shooting import shooting
 from logic.buttons import Buttons
+from logic.driver.driver_logic import IOCTL_MOUSE_MOVE, Request
+
 import atexit
-
-# Conditional imports
-if cfg.mouse_rzr:
-    from logic.rzctl import RZCONTROL
-
-if cfg.arduino_move or cfg.arduino_shoot:
-    from logic.arduino import arduino
-
-# Konstanten definieren
-FILE_DEVICE_UNKNOWN = 0x22
-METHOD_BUFFERED = 0
-FILE_SPECIAL_ACCESS = 0x0
-
-def CTL_CODE(DeviceType, Function, Method, Access):
-    return (DeviceType << 16) | (Access << 14) | (Function << 2) | Method
-
-IOCTL_MOUSE_MOVE = CTL_CODE(FILE_DEVICE_UNKNOWN, 0x696, METHOD_BUFFERED, FILE_SPECIAL_ACCESS)
 
 
 class Mouse_net(nn.Module):
@@ -47,13 +32,6 @@ class Mouse_net(nn.Module):
 
     def forward(self, x):
         return self.layers(x)
-
-class Request(ctypes.Structure):
-    _fields_ = [
-        ("x", ctypes.c_long),
-        ("y", ctypes.c_long),
-        ("button_flags", ctypes.c_ushort)
-    ]
 
 class MouseThread:
     def __init__(self):
@@ -94,8 +72,8 @@ class MouseThread:
             self.init_kernel_driver()
     
     def load_kernel_driver(self):
-        driver_path = os.path.join(os.path.dirname(__file__), 'data', 'driver.sys')
-        mapper_path = os.path.join(os.path.dirname(__file__), 'data', 'mapper.exe')
+        driver_path = os.path.join(os.path.dirname(__file__), 'driver', 'driver.sys')
+        mapper_path = os.path.join(os.path.dirname(__file__), 'driver', 'mapper.exe')
         try:
             result = subprocess.run([mapper_path, driver_path], capture_output=True, text=True)
             if result.returncode == 0:
@@ -124,15 +102,24 @@ class MouseThread:
         return f'cuda:{cfg.AI_device}'
 
     def setup_hardware(self):
+        self.ghub = None
+        self.mouse_rzr = None
+        self.arduino_move = None
         if cfg.mouse_ghub:
-            from logic.ghub import gHub
-            self.ghub = gHub()
+            from logic.ghub import GhubMouse
+            self.ghub = GhubMouse()
 
         if cfg.mouse_rzr:
             dll_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "rzctl.dll")
-            self.rzr = RZCONTROL(dll_path)
-            if not self.rzr.init():
+            from logic.rzctl import RZCONTROL
+            self.mouse_rzr = RZCONTROL(dll_path)
+            if not self.mouse_rzr:
                 print("Failed to initialize rzctl")
+                
+        if cfg.arduino_move or cfg.arduino_shoot:
+            from logic.arduino import arduino
+            self.arduino_move = arduino()
+
 
     def setup_ai(self):
         if cfg.AI_mouse_net:
@@ -306,11 +293,10 @@ class MouseThread:
                 if result == 0:
                     print("[ERROR] Kernel Bypass: DeviceIoControl fehlgeschlagen.")
             else:
-                if not self.mouse_ghub and not self.arduino_move and not self.mouse_rzr:
+                if not self.ghub and not self.arduino_move and not self.mouse_rzr:
                     win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, x, y, 0, 0)
-                elif self.mouse_ghub:
-                    from logic.ghub import gHub
-                    gHub().mouse_xy(x, y)
+                elif self.ghub:
+                    self.ghub().mouse_xy(x, y)
                 elif self.mouse_rzr:
                     from logic.rzctl import RZCONTROL
                     self.rzr = RZCONTROL("rzctl.dll")

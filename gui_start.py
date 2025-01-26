@@ -2,7 +2,7 @@ import sys
 import configparser
 import subprocess
 import os
-from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QLabel, QTabWidget, QFormLayout, QLineEdit, QCheckBox, QSpinBox, QDoubleSpinBox, QTextEdit, QHBoxLayout
+from PyQt6.QtWidgets import QComboBox,QApplication, QWidget, QVBoxLayout, QPushButton, QLabel, QTabWidget, QFormLayout, QLineEdit, QCheckBox, QSpinBox, QDoubleSpinBox, QTextEdit, QHBoxLayout
 from PyQt6.QtCore import Qt, QTimer, QProcess
 from PyQt6.QtGui import QGuiApplication, QKeyEvent
 
@@ -22,13 +22,14 @@ class ConfigGUI(QWidget):
         self.main_layout = QVBoxLayout()
         self.tabs = QTabWidget()
         self.create_tabs()
+        self.create_macros_tab()
 
         # Buttons
         self.start_button = QPushButton("Start")
         self.start_button.clicked.connect(self.toggle_program)
         self.save_button = QPushButton("Save (F4)")
         self.save_button.clicked.connect(self.save_config)
-        self.save_button.setVisible(False)
+        self.save_button.setVisible(True)
 
         # Log-Konsole (seitlich versteckt)
         self.log_console = QTextEdit()
@@ -60,6 +61,8 @@ class ConfigGUI(QWidget):
 
     def create_tabs(self):
         for section in self.config.sections():
+            if section == "Macro":
+                continue
             tab = QWidget()
             form_layout = QFormLayout()
 
@@ -91,6 +94,38 @@ class ConfigGUI(QWidget):
             tab.setLayout(form_layout)
             self.tabs.addTab(tab, section)
 
+    def create_macros_tab(self):
+        tab = QWidget()
+        layout = QFormLayout()
+
+        macros = [f for f in os.listdir("macros") if f.endswith(".xml")]
+        macro_box = QComboBox()
+        macro_box.addItems(macros)
+
+        current_macro = self.config["Macro"].get("active_macro", "None")
+        active_checkbox = QCheckBox("Active")
+        
+        if current_macro != "None" and current_macro in macros:
+            macro_box.setCurrentText(current_macro)
+            active_checkbox.setChecked(True)
+
+        def on_macro_changed():
+            if active_checkbox.isChecked():
+                self.update_config("Macro", "active_macro", macro_box.currentText())
+            else:
+                self.update_config("Macro", "active_macro", "None")
+        
+        macro_box.currentIndexChanged.connect(on_macro_changed)
+        active_checkbox.stateChanged.connect(on_macro_changed)
+
+        hotkey_edit = QLineEdit("LeftMouseButton")
+        layout.addRow("Macro:", macro_box)
+        layout.addRow("Active:", active_checkbox)
+        layout.addRow("Hotkey:", hotkey_edit)
+
+        tab.setLayout(layout)
+        self.tabs.addTab(tab, "Macros")
+
 
      
     
@@ -105,6 +140,9 @@ class ConfigGUI(QWidget):
 
     def toggle_program(self):
         if self.process is None:
+            current_macro = self.config["Macro"].get("active_macro", "None")
+            if current_macro != "None":
+                self.log_console.append(f"WARNING: Active macro '{current_macro}'")
             self.save_config()
             self.process = QProcess()
             self.process.setWorkingDirectory(os.path.dirname(CONFIG_PATH))
@@ -118,6 +156,7 @@ class ConfigGUI(QWidget):
         else:
             self.process.terminate()
             self.process = None
+            self.log_console.clear()
             self.start_button.setText("Start")
 
     def handle_stdout(self):

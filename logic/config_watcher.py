@@ -16,9 +16,9 @@ class Config():
             quit()
         
         aim_profiles = {
-            "head": 0.94,        # Center of the head
-            "neck": 0.50,        # Neck area
-            "chest": 0.20,       # Chest area
+            "head": 0.30,        # Center of the head
+            "neck": 0.20,        # Neck area
+            "chest": 0.10,       # Chest area
             "stomach": 0.00      # Stomach area
         }
         
@@ -128,6 +128,12 @@ class Config():
         self.debug_window_scale_percent = int(self.config_Debug_window["debug_window_scale_percent"])
         self.debug_window_screenshot_key = str(self.config_Debug_window["debug_window_screenshot_key"])
         self.debug_window_name = self.window_name
+        
+        #Macro
+        self.config_macro = self.config["Macro"]
+        self.active_macro = str(self.config_macro["active_macro"])
+        
+        
         
         if verbose:
             print("Config reloaded")
