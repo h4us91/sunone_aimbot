@@ -10,9 +10,6 @@ import numpy as np
 import cv2
 
 
-
-
-
 class Target:
     def __init__(self, x, y, w, h, cls):
         self.x = x
@@ -43,6 +40,8 @@ class FrameParser:
             if detections is not None and detections.xyxy.any(): 
                 target = self.sort_targets(detections)
                 self._handle_target(target)
+              
+
 
     def _process_yolo_detections(self, results, image):
         for frame in results:
@@ -146,15 +145,17 @@ class FrameParser:
 
     def _convert_sv_to_tensor(self, frame):
         xyxy = frame.xyxy
-        xywh = torch.tensor([
+        xywh = np.column_stack([
             (xyxy[:, 0] + xyxy[:, 2]) / 2,  
             (xyxy[:, 1] + xyxy[:, 3]) / 2,  
             xyxy[:, 2] - xyxy[:, 0],        
             xyxy[:, 3] - xyxy[:, 1]        
-        ], dtype=torch.float32).to(self.arch).T
-        
-        classes_tensor = torch.from_numpy(np.array(frame.class_id, dtype=np.float32)).to(self.arch)
-        return xywh, classes_tensor
+        ]).astype(np.float32)  
+
+        xywh_tensor = torch.tensor(xywh, dtype=torch.float32, device=self.arch)  
+
+        classes_tensor = torch.tensor(frame.class_id, dtype=torch.float32, device=self.arch)  
+        return xywh_tensor, classes_tensor
 
     def _find_nearest_target(self, boxes_array, classes_tensor):
         center = torch.tensor([capture.screen_x_center, capture.screen_y_center], device=self.arch)

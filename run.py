@@ -67,7 +67,7 @@ def perform_detection(model, image):
         return result
 
 def init():
-   # run_checks()
+    run_checks()
     
     try:
         model = YOLO(f"models/{cfg.AI_model_name}", task="detect")

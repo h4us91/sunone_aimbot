@@ -1,0 +1,26 @@
+<Root>
+  <DefaultMacro>
+    <Major>Stock N-TEC</Major>
+    <Description>Sup,
+
+made this Macro for a stock N-TEC, pretty roaming with it. Resolution 1920x1080
+DPI: 800 
+Ingame: 20</Description>
+    <Comment></Comment>
+    <GUIOption>
+      <RepeatType>1</RepeatType>
+    </GUIOption>
+    <KeyUp>
+      <Syntax></Syntax>
+    </KeyUp>
+    <KeyDown>
+      <Syntax>LeftDown 1
+LeftDown 1
+MoveR 0 8
+LeftUp 1
+MoveR 0 -5
+Delay 75 ms</Syntax>
+    </KeyDown>
+    <Software>APB Reloaded</Software>
+  </DefaultMacro>
+</Root>

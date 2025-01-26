@@ -212,10 +212,14 @@ class MouseThread:
         base_speed = self.min_speed_multiplier + (self.max_speed_multiplier - self.min_speed_multiplier) * (1 - normalized_distance)
 
         try:
-            target_x_section = int((target_x - self.center_x + self.screen_width / 2) / self.section_size_x)
-            target_y_section = int((target_y - self.center_y + self.screen_height / 2) / self.section_size_y)
-        except ValueError:
-            return 1  # Return default multiplier in case of invalid conversion
+                if self.section_size_x == 0 or self.section_size_y == 0:
+                    return 1  # Verhindere Division durch Null
+                
+                target_x_section = int((target_x - self.center_x + self.screen_width / 2) / max(self.section_size_x, 1e-6))
+                target_y_section = int((target_y - self.center_y + self.screen_height / 2) / max(self.section_size_y, 1e-6))
+        except (ValueError, OverflowError):
+                return 1  # Verhindere Absturz bei ungültigen Werten
+
 
         distance_from_center = max(abs(50 - target_x_section), abs(50 - target_y_section))
 
@@ -326,6 +330,8 @@ class MouseThread:
             visuals.draw_bScope(x1, x2, y1, y2, bScope)
         
         return bScope
+    
+
 
     
     def close_driver(self):

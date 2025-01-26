@@ -77,8 +77,6 @@ class Config():
         self.mouse_ghub = self.config_Mouse.getboolean("mouse_ghub")
         self.mouse_rzr = self.config_Mouse.getboolean("mouse_rzr")
         self.kernel_bypass = self.config_Mouse.getboolean("kernel_bypass")
-        self.silent_aim = self.config_Aim.getboolean("silent_aim")
-
 
         # Shooting
         self.config_Shooting = self.config["Shooting"]

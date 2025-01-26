@@ -168,7 +168,7 @@ class Capture(threading.Thread):
         except FileNotFoundError:
             print('(version file is not found)')
 
-        print(f'Sunone Aimbot is started! (Version {version})\n\n',
+        print(f'AI-Aimbot is started! (Version {version})\n\n',
               'Hotkeys:\n',
               f'[{cfg.hotkey_targeting}] - Aiming at the target\n',
               f'[{cfg.hotkey_exit}] - EXIT\n',
