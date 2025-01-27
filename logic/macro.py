@@ -2,8 +2,6 @@
 
 import xml.etree.ElementTree as ET
 from logic.config_watcher import cfg
-import win32api
-import win32con
 import time
 import os
 
@@ -48,12 +46,14 @@ class Macro:
         self._run_syntax(self.syntax_key_up, stop_event)
 
     def _run_syntax(self, syntax, stop_event=None):
-        lines = [l.strip() for l in syntax.splitlines() if l.strip()]
+        lines = [line.strip() for line in syntax.splitlines() if line.strip()]
         for line in lines:
             if stop_event and stop_event.is_set():
                 print("[DEBUG] Stop event set, exiting macro execution.")
                 break
+
             print(f"[DEBUG] Running command: {line}")  # Debug-Ausgabe
+
             if line.startswith("LeftDown"):
                 self.mouse_thread.click_mouse_down()
             elif line.startswith("LeftUp"):
@@ -76,9 +76,11 @@ class Macro:
                     print(f"[ERROR] Invalid Delay command: {line}")
                     continue
                 try:
+                    # Extrahiere die Zeit in Millisekunden
                     ms = int(parts[1])
                     print(f"[DEBUG] Sleeping for {ms} ms")  # Debug-Ausgabe vor der Pause
-                    total_sleep = ms / 1000.0
+
+                    total_sleep = ms / 1000.0  # Konvertiere in Sekunden
                     sleep_interval = 0.01  # 10 ms
                     slept = 0
                     while slept < total_sleep:
@@ -91,3 +93,4 @@ class Macro:
                     print(f"[ERROR] Invalid time for Delay: {parts[1]}")
             else:
                 print(f"[WARN] Unknown command: {line}")
+

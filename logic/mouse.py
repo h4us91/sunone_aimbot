@@ -159,8 +159,11 @@ class MouseThread:
             key_code = Buttons.KEY_CODES.get(self.macro.hotkey.strip())
             if key_code:
                 # Überprüfe, ob der Hotkey gedrückt ist und ob keine Simulation läuft
-                return win32api.GetAsyncKeyState(key_code) < 0 and not self.simulating
+                state = win32api.GetAsyncKeyState(key_code) & 0x8000
+              #  print(f"[DEBUG] Hotkey {self.macro.hotkey} state: {'Pressed' if state else 'Released'}")
+                return state and not self.simulating
         return False
+
 
 
     def macro_monitor_loop(self):
@@ -207,10 +210,14 @@ class MouseThread:
             except Exception as e:
                 print(f"[ERROR] Fehler beim Ausführen des Makros: {e}")
             finally:
+                if self.simulating:
+                    print("[DEBUG] Makro wird gestoppt - Sende LeftUp")
+                    self.macro.run_key_up(self.stop_macro_event)  # Stelle sicher, dass die Maustaste losgelassen wird
                 self.simulating = False  # Entferne das Simulations-Flag
             # Optional: Kleine Pause zur CPU-Entlastung (falls nötig)
-            #time.sleep(0.01)
+            time.sleep(0.01)
         print("[DEBUG] Makro-Thread beendet")
+
 
 
     def click_mouse_down(self):
@@ -237,9 +244,11 @@ class MouseThread:
                 None, 0, ctypes.byref(bytes_returned), None
             )
             if result == 0:
-                print("[ERROR] Kernel Bypass: DeviceIoControl LeftUp fehlgeschlagen.")
+                print("[ERROR] Kernel Bypass: DeviceIoControl LeftUp fehlgeschlagen. Fallback zu win32api.")
+                win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0)
         else:
-            win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0)
+             win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0)
+
 
     def move_mouse_relative(self, x, y):
         if self.kernel_bypass and self.handle:
