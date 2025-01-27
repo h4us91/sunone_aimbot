@@ -2,11 +2,20 @@ import sys
 import configparser
 import subprocess
 import os
-from PyQt6.QtWidgets import QComboBox,QApplication, QWidget, QVBoxLayout, QPushButton, QLabel, QTabWidget, QFormLayout, QLineEdit, QCheckBox, QSpinBox, QDoubleSpinBox, QTextEdit, QHBoxLayout
-from PyQt6.QtCore import Qt, QTimer, QProcess
+import threading
+import keyboard  # Importiere das keyboard-Modul
+from PyQt6.QtWidgets import (
+    QComboBox, QApplication, QWidget, QVBoxLayout, QPushButton, QLabel, 
+    QTabWidget, QFormLayout, QLineEdit, QCheckBox, QSpinBox, QDoubleSpinBox, 
+    QTextEdit, QHBoxLayout, QGroupBox
+)
+from PyQt6.QtCore import Qt, QTimer, QProcess, pyqtSignal, QObject
 from PyQt6.QtGui import QGuiApplication, QKeyEvent
 
 CONFIG_PATH = "C:/Users/H4uS/Documents/Git/sunone_aimbot/config.ini"
+
+class Communicate(QObject):
+    toggle_visibility = pyqtSignal()
 
 class ConfigGUI(QWidget):
     def __init__(self):
@@ -17,12 +26,14 @@ class ConfigGUI(QWidget):
         self.load_config()
         self.mouse = None
 
-        
+        # Kommunikationsobjekt für Signal-Slot-Mechanismus
+        self.comm = Communicate()
+        self.comm.toggle_visibility.connect(self.toggle_visibility)
+
         self.layout = QHBoxLayout()  # Hauptlayout (Horizontal für Sidebar)
         self.main_layout = QVBoxLayout()
         self.tabs = QTabWidget()
         self.create_tabs()
-        self.create_macros_tab()
 
         # Buttons
         self.start_button = QPushButton("Start")
@@ -56,80 +67,172 @@ class ConfigGUI(QWidget):
         self.setLayout(self.layout)
 
         self.process = None  
+
+        # Starte den globalen Hotkey-Listener in einem separaten Thread
+        self.start_hotkey_listener()
+
     def load_config(self):
         self.config.read(CONFIG_PATH)
 
     def create_tabs(self):
+        # Definiere gruppierte Tabs
+        grouped_tabs = {
+            "Aim | Shooting | Macro": ["Aim", "Shooting", "Macro"],
+            "Mouse | Arduino": ["Mouse", "Arduino"],
+            "Capture Window": ["Detection window", "Capture Methods"],
+            "Overlay | Debug Window": ["overlay", "Debug window"],
+            # Füge hier weitere gruppierte Tabs hinzu, falls benötigt
+        }
+
+        # Halte den Überblick über bereits gruppierte Sektionen
+        grouped_sections = set()
+
+        # Erstelle gruppierte Tabs
+        for tab_name, sections in grouped_tabs.items():
+            tab = QWidget()
+            tab_layout = QVBoxLayout()
+
+            for section in sections:
+                if section not in self.config.sections():
+                    continue  # Überspringe, wenn die Sektion nicht existiert
+
+                if section == "Macro":
+                    # Spezialbehandlung für den Macro-Abschnitt
+                    macro_group = QGroupBox(section)
+                    macro_layout = QFormLayout()
+
+                    # Macro ComboBox
+                    macros = [f for f in os.listdir("macros") if f.endswith(".xml")]
+                    macro_box = QComboBox()
+                    macro_box.addItems(macros)
+
+                    current_macro = self.config["Macro"].get("active_macro", "None")
+                    active_checkbox = QCheckBox("Active")
+                    
+                    if current_macro != "None" and current_macro in macros:
+                        macro_box.setCurrentText(current_macro)
+                        active_checkbox.setChecked(True)
+
+                    def on_macro_changed():
+                        if active_checkbox.isChecked():
+                            selected_macro = macro_box.currentText()
+                            self.update_config("Macro", "active_macro", selected_macro)
+                            self.log_console.append(f"Active macro set to '{selected_macro}'")
+                        else:
+                            self.update_config("Macro", "active_macro", "None")
+                            self.log_console.append("Macro deactivated")
+
+                    macro_box.currentIndexChanged.connect(on_macro_changed)
+                    active_checkbox.stateChanged.connect(on_macro_changed)
+
+                    # Hotkey Edit
+                    hotkey_edit = QLineEdit(self.config["Hotkeys"].get("hotkey_targeting", "LeftMouseButton"))
+                    hotkey_edit.textChanged.connect(lambda val: self.update_config("Hotkeys", "hotkey_targeting", val))
+
+                    macro_layout.addRow("Macro:", macro_box)
+                    macro_layout.addRow("Active:", active_checkbox)
+                    macro_layout.addRow("Hotkey:", hotkey_edit)
+
+                    macro_group.setLayout(macro_layout)
+                    tab_layout.addWidget(macro_group)
+                else:
+                    # Allgemeine Sektionen
+                    group_box = QGroupBox(section)
+                    form_layout = QFormLayout()
+
+                    for key, value in self.config[section].items():
+                        widget = self.create_widget(section, key, value)
+                        if widget:
+                            form_layout.addRow(QLabel(key.replace('_', ' ').capitalize()), widget)
+
+                    group_box.setLayout(form_layout)
+                    tab_layout.addWidget(group_box)
+
+                grouped_sections.add(section)
+
+            tab_layout.addStretch()
+            tab.setLayout(tab_layout)
+            self.tabs.addTab(tab, tab_name)
+
+        # Erstelle einzelne Tabs für Sektionen, die nicht gruppiert sind
         for section in self.config.sections():
+            if section in grouped_sections:
+                continue  # Bereits gruppiert
+
             if section == "Macro":
-                continue
+                continue  # Macro ist bereits gruppiert
+
             tab = QWidget()
             form_layout = QFormLayout()
 
             for key, value in self.config[section].items():
-                if value.lower() in ["true", "false"]:
-                    checkbox = QCheckBox()
-                    checkbox.setChecked(value.lower() == "true")
-                    checkbox.stateChanged.connect(lambda state, sec=section, k=key: self.update_config(sec, k, "true" if state else "false"))
-                    form_layout.addRow(QLabel(key), checkbox)
-
-                elif value.replace('.', '', 1).isdigit():
-                    if '.' in value:
-                        spinbox = QDoubleSpinBox()
-                        spinbox.setRange(0.0, 10000.0)
-                        spinbox.setSingleStep(0.1)
-                        spinbox.setValue(float(value)) 
-                    else:
-                        spinbox = QSpinBox()
-                        spinbox.setRange(0, 10000)
-                        spinbox.setValue(int(value))  
-                    spinbox.valueChanged.connect(lambda val, sec=section, k=key: self.update_config(sec, k, str(val)))
-                    form_layout.addRow(QLabel(key), spinbox)
-
-                else:
-                    line_edit = QLineEdit(value)
-                    line_edit.textChanged.connect(lambda val, sec=section, k=key: self.update_config(sec, k, val))
-                    form_layout.addRow(QLabel(key), line_edit)
+                widget = self.create_widget(section, key, value)
+                if widget:
+                    form_layout.addRow(QLabel(key.replace('_', ' ').capitalize()), widget)
 
             tab.setLayout(form_layout)
             self.tabs.addTab(tab, section)
 
-    def create_macros_tab(self):
-        tab = QWidget()
-        layout = QFormLayout()
+    def create_widget(self, section, key, value):
+        """Hilfsfunktion zur Erstellung von Widgets basierend auf dem Werttyp."""
+        if value.lower() in ["true", "false"]:
+            checkbox = QCheckBox()
+            checkbox.setChecked(value.lower() == "true")
+            checkbox.stateChanged.connect(
+                lambda state, sec=section, k=key: self.update_config(sec, k, "true" if state else "false")
+            )
+            return checkbox
 
-        macros = [f for f in os.listdir("macros") if f.endswith(".xml")]
-        macro_box = QComboBox()
-        macro_box.addItems(macros)
-
-        current_macro = self.config["Macro"].get("active_macro", "None")
-        active_checkbox = QCheckBox("Active")
-        
-        if current_macro != "None" and current_macro in macros:
-            macro_box.setCurrentText(current_macro)
-            active_checkbox.setChecked(True)
-
-        def on_macro_changed():
-            if active_checkbox.isChecked():
-                self.update_config("Macro", "active_macro", macro_box.currentText())
+        elif self.is_number(value):
+            if '.' in value:
+                spinbox = QDoubleSpinBox()
+                spinbox.setRange(0.0, 10000.0)
+                spinbox.setSingleStep(0.1)
+                spinbox.setValue(float(value)) 
             else:
-                self.update_config("Macro", "active_macro", "None")
-        
-        macro_box.currentIndexChanged.connect(on_macro_changed)
-        active_checkbox.stateChanged.connect(on_macro_changed)
+                spinbox = QSpinBox()
+                spinbox.setRange(0, 10000)
+                spinbox.setValue(int(value))  
+            spinbox.valueChanged.connect(
+                lambda val, sec=section, k=key: self.update_config(sec, k, str(val))
+            )
+            return spinbox
 
-        hotkey_edit = QLineEdit("LeftMouseButton")
-        layout.addRow("Macro:", macro_box)
-        layout.addRow("Active:", active_checkbox)
-        layout.addRow("Hotkey:", hotkey_edit)
+        else:
+            line_edit = QLineEdit(value)
+            line_edit.textChanged.connect(
+                lambda val, sec=section, k=key: self.update_config(sec, k, val)
+            )
+            return line_edit
 
-        tab.setLayout(layout)
-        self.tabs.addTab(tab, "Macros")
+    def is_number(self, s):
+        """Prüft, ob der gegebene String eine Zahl ist."""
+        try:
+            float(s)
+            return True
+        except ValueError:
+            return False
 
+    def start_hotkey_listener(self):
+        """Startet einen Listener für den globalen Hotkey (F12), um die GUI umzuschalten."""
+        def listen_hotkey():
+            # Definiere den Hotkey, z.B. F12
+            keyboard.add_hotkey('f12', self.comm.toggle_visibility.emit)
+            keyboard.wait()  # Blockiert diesen Thread und wartet auf Tastendrücke
 
-     
-    
-        
+        # Starte den Listener in einem separaten Thread
+        listener_thread = threading.Thread(target=listen_hotkey, daemon=True)
+        listener_thread.start()
+
+    def toggle_visibility(self):
+        """Schaltet die Sichtbarkeit der GUI um."""
+        if self.isVisible():
+            self.hide()
+            self.log_console.append("GUI versteckt!")
+        else:
+            self.show()
+            self.log_console.append("GUI angezeigt!")
+
     def update_config(self, section, key, value):
         self.config.set(section, key, value)
 
@@ -167,8 +270,6 @@ class ConfigGUI(QWidget):
         text = self.process.readAllStandardError().data().decode()
         self.log_console.append(f"<span style='color:red;'>{text}</span>")
 
-
-    
     def toggle_log_console(self):
         self.log_console.setVisible(not self.log_console.isVisible())
         self.toggle_log_button.setText("Hide Logs" if self.log_console.isVisible() else "Show Logs")
@@ -185,22 +286,8 @@ class ConfigGUI(QWidget):
 
             QTimer.singleShot(100, self.read_process_output) 
 
- 
+   
 
-    def keyPressEvent(self, event: QKeyEvent):
-        """Fängt Hotkeys ab und führt die entsprechenden Aktionen aus."""
-        
-        if event.key() == Qt.Key_F2: 
-            self.close() 
-        
-        elif event.key() == Qt.Key_F3:  
-            print("Aimbot paused!")  
-
-        elif event.key() == Qt.Key_F4: 
-            self.save_config()  
-            print("Config reloaded!")  
-
-        
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     gui = ConfigGUI()
