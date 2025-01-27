@@ -14,9 +14,9 @@ Ingame: 20</Description>
     <KeyDown>
       <Syntax>LeftDown 1
 LeftDown 1
-MoveR 0 8
+MoveR 0 22
 LeftUp 1
-MoveR 0 -5
+MoveR 0 -8
 Delay 75 ms</Syntax>
     </KeyDown>
     <Hotkey>F8</Hotkey>

@@ -39,10 +39,11 @@ class MouseThread:
         self.macro = None
         self.last_macro_state = False 
         self.macro_thread = None  
-        self.stop_macro_event = threading.Event() 
+        self.stop_macro_event = threading.Event()
+        self.simulating = False 
         if cfg.active_macro and cfg.active_macro.lower() != "none":
             try:
-                self.macro = Macro()  
+                self.macro = Macro(self)  
                 print(f"[INFO] Aktives Makro geladen: {cfg.active_macro}")
             except Exception as e:
                 print(f"[ERROR] Macro konnte nicht geladen werden: {e}")
@@ -55,20 +56,8 @@ class MouseThread:
             self.macro_monitor_thread = threading.Thread(target=self.macro_monitor_loop, daemon=True)
             self.macro_monitor_thread.start()
             print("[INFO] Makro-Monitoring-Thread gestartet")      
-              
-    def get_macro_hotkey_state(self):
-        if self.macro and self.macro.hotkey:
-            key_code = Buttons.KEY_CODES.get(self.macro.hotkey.strip())
-            if key_code:
-                return win32api.GetAsyncKeyState(key_code) < 0
-        return False
+ 
 
-    def macro_monitor_loop(self):
-        while True:
-            self.handle_macro()
-            time.sleep(0.05)  # 50 ms
-            
-            
     def initialize_parameters(self):
         self.dpi = cfg.mouse_dpi
         self.mouse_sensitivity = cfg.mouse_sensitivity
@@ -159,7 +148,26 @@ class MouseThread:
                 print(e)
                 print('Please train mouse_net model, or download latest trained mouse_net.pth model from repository.')
                 exit()
-            self.model.eval()
+            self.model.eval()   
+            
+###############################################################################
+#                                MACRO SECTION                                #
+###############################################################################
+
+    def get_macro_hotkey_state(self):
+        if self.macro and self.macro.hotkey:
+            key_code = Buttons.KEY_CODES.get(self.macro.hotkey.strip())
+            if key_code:
+                # Überprüfe, ob der Hotkey gedrückt ist und ob keine Simulation läuft
+                return win32api.GetAsyncKeyState(key_code) < 0 and not self.simulating
+        return False
+
+
+    def macro_monitor_loop(self):
+        while True:
+            self.handle_macro()
+            time.sleep(0.05)  # 50 ms
+               
 
     def handle_macro(self):
         if not self.macro:
@@ -194,14 +202,64 @@ class MouseThread:
         while not self.stop_macro_event.is_set():
             try:
                 print("[DEBUG] Executing run_key_down")
-                self.macro.run_key_down()
+                self.simulating = True  # Setze das Simulations-Flag
+                self.macro.run_key_down(self.stop_macro_event)  # Übergabe des stop_events
             except Exception as e:
                 print(f"[ERROR] Fehler beim Ausführen des Makros: {e}")
-            # Keine zusätzliche Pause nötig, da die Makro-Syntax Pausen enthält
-        print("[DEBUG] Makro-Thread beendet")                
+            finally:
+                self.simulating = False  # Entferne das Simulations-Flag
+            # Optional: Kleine Pause zur CPU-Entlastung (falls nötig)
+            #time.sleep(0.01)
+        print("[DEBUG] Makro-Thread beendet")
+
+
+    def click_mouse_down(self):
+        if self.kernel_bypass and self.handle:
+            # Kernel Bypass Methode für LeftDown
+            request = Request(0, 0, 1)  # Beispiel: 1 für LeftDown
+            bytes_returned = ctypes.c_ulong(0)
+            result = ctypes.windll.kernel32.DeviceIoControl(
+                self.handle, IOCTL_MOUSE_MOVE, ctypes.byref(request), ctypes.sizeof(request),
+                None, 0, ctypes.byref(bytes_returned), None
+            )
+            if result == 0:
+                print("[ERROR] Kernel Bypass: DeviceIoControl LeftDown fehlgeschlagen.")
+        else:
+            win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, 0, 0)
+
+    def click_mouse_up(self):
+        if self.kernel_bypass and self.handle:
+            # Kernel Bypass Methode für LeftUp
+            request = Request(0, 0, 2)  # Beispiel: 2 für LeftUp
+            bytes_returned = ctypes.c_ulong(0)
+            result = ctypes.windll.kernel32.DeviceIoControl(
+                self.handle, IOCTL_MOUSE_MOVE, ctypes.byref(request), ctypes.sizeof(request),
+                None, 0, ctypes.byref(bytes_returned), None
+            )
+            if result == 0:
+                print("[ERROR] Kernel Bypass: DeviceIoControl LeftUp fehlgeschlagen.")
+        else:
+            win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0)
+
+    def move_mouse_relative(self, x, y):
+        if self.kernel_bypass and self.handle:
+            # Kernel Bypass Methode für Bewegung
+            request = Request(x, y, 0)  # Beispiel: 0 für Bewegung
+            bytes_returned = ctypes.c_ulong(0)
+            result = ctypes.windll.kernel32.DeviceIoControl(
+                self.handle, IOCTL_MOUSE_MOVE, ctypes.byref(request), ctypes.sizeof(request),
+                None, 0, ctypes.byref(bytes_returned), None
+            )
+            if result == 0:
+                print("[ERROR] Kernel Bypass: DeviceIoControl MoveR fehlgeschlagen.")
+        else:
+            win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, x, y, 0, 0)
+   
+###############################################################################
+#                             END MACRO SECTION                                #
+###############################################################################            
     
     def process_data(self, data):
-       # self.handle_macro()
         if isinstance(data, sv.Detections):
             target_x, target_y = data.xyxy.mean(axis=1)
             target_w, target_h = data.xyxy[:, 2] - data.xyxy[:, 0], data.xyxy[:, 3] - data.xyxy[:, 1]

@@ -8,7 +8,8 @@ import time
 import os
 
 class Macro:
-    def __init__(self, macro_name=None):
+    def __init__(self, mouse_thread, macro_name=None):
+        self.mouse_thread = mouse_thread  # Referenz zur MouseThread-Instanz
         if macro_name is None:
             macro_name = cfg.active_macro
 
@@ -39,11 +40,11 @@ class Macro:
         return el.text.strip() if el is not None and el.text else ""
 
     def run_key_down(self, stop_event=None):
-        print("[DEBUG] Executing KeyDown syntax")  # Debug-Ausgabe
+        print("[DEBUG] Executing KeyDown syntax")
         self._run_syntax(self.syntax_key_down, stop_event)
 
     def run_key_up(self, stop_event=None):
-        print("[DEBUG] Executing KeyUp syntax")  # Debug-Ausgabe
+        print("[DEBUG] Executing KeyUp syntax")
         self._run_syntax(self.syntax_key_up, stop_event)
 
     def _run_syntax(self, syntax, stop_event=None):
@@ -54,9 +55,9 @@ class Macro:
                 break
             print(f"[DEBUG] Running command: {line}")  # Debug-Ausgabe
             if line.startswith("LeftDown"):
-                win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, 0, 0)
+                self.mouse_thread.click_mouse_down()
             elif line.startswith("LeftUp"):
-                win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0)
+                self.mouse_thread.click_mouse_up()
             elif line.startswith("MoveR"):
                 parts = line.split()
                 if len(parts) != 3:
@@ -66,7 +67,7 @@ class Macro:
                 try:
                     x = int(x)
                     y = int(y)
-                    win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, x, y, 0, 0)
+                    self.mouse_thread.move_mouse_relative(x, y)
                 except ValueError:
                     print(f"[ERROR] Invalid coordinates for MoveR: {x}, {y}")
             elif line.startswith("Delay"):
