@@ -13,6 +13,7 @@ from logic.visual import visuals
 from logic.shooting import shooting
 from logic.buttons import Buttons
 from logic.driver.driver_logic import IOCTL_MOUSE_MOVE, Request
+import threading
 
 import atexit
 from logic.macro import Macro
@@ -36,23 +37,38 @@ class Mouse_net(nn.Module):
 class MouseThread:
     def __init__(self):
         self.macro = None
+        self.last_macro_state = False 
+        self.macro_thread = None  
+        self.stop_macro_event = threading.Event() 
         if cfg.active_macro and cfg.active_macro.lower() != "none":
             try:
-                self.macro = Macro()
+                self.macro = Macro()  
+                print(f"[INFO] Aktives Makro geladen: {cfg.active_macro}")
             except Exception as e:
-                print(f"Macro konnte nicht geladen werden: {e}")
+                print(f"[ERROR] Macro konnte nicht geladen werden: {e}")
         self.last_macro_state = False  
         self.initialize_parameters()
         self.setup_hardware()
         self.setup_ai()
         self.driver_loaded = False  
-
+        if self.macro:
+            self.macro_monitor_thread = threading.Thread(target=self.macro_monitor_loop, daemon=True)
+            self.macro_monitor_thread.start()
+            print("[INFO] Makro-Monitoring-Thread gestartet")      
+              
     def get_macro_hotkey_state(self):
-        if self.macro.hotkey:
+        if self.macro and self.macro.hotkey:
             key_code = Buttons.KEY_CODES.get(self.macro.hotkey.strip())
-            return key_code and win32api.GetAsyncKeyState(key_code) < 0
+            if key_code:
+                return win32api.GetAsyncKeyState(key_code) < 0
         return False
-    
+
+    def macro_monitor_loop(self):
+        while True:
+            self.handle_macro()
+            time.sleep(0.05)  # 50 ms
+            
+            
     def initialize_parameters(self):
         self.dpi = cfg.mouse_dpi
         self.mouse_sensitivity = cfg.mouse_sensitivity
@@ -148,15 +164,44 @@ class MouseThread:
     def handle_macro(self):
         if not self.macro:
             return
+
         new_state = self.get_macro_hotkey_state()
         if new_state and not self.last_macro_state:
-            self.macro.run_key_down()
+            print("[INFO] Makro Hotkey gedrückt - Starte Makro-Thread")
+            self.start_macro()
         elif not new_state and self.last_macro_state:
-            self.macro.run_key_up()
+            print("[INFO] Makro Hotkey losgelassen - Stoppe Makro-Thread")
+            self.stop_macro()
+
         self.last_macro_state = new_state
     
+    def start_macro(self):
+        if self.macro_thread and self.macro_thread.is_alive():
+            print("[WARN] Makro-Thread läuft bereits")
+            return
+        self.stop_macro_event.clear()
+        self.macro_thread = threading.Thread(target=self.execute_macro, daemon=True)
+        self.macro_thread.start()
+    
+    def stop_macro(self):
+        if self.macro_thread and self.macro_thread.is_alive():
+            self.stop_macro_event.set()
+            self.macro_thread.join()
+            print("[INFO] Makro-Thread gestoppt")  
+            
+    def execute_macro(self):
+        print("[DEBUG] Makro-Thread gestartet")
+        while not self.stop_macro_event.is_set():
+            try:
+                print("[DEBUG] Executing run_key_down")
+                self.macro.run_key_down()
+            except Exception as e:
+                print(f"[ERROR] Fehler beim Ausführen des Makros: {e}")
+            # Keine zusätzliche Pause nötig, da die Makro-Syntax Pausen enthält
+        print("[DEBUG] Makro-Thread beendet")                
+    
     def process_data(self, data):
-        self.handle_macro()
+       # self.handle_macro()
         if isinstance(data, sv.Detections):
             target_x, target_y = data.xyxy.mean(axis=1)
             target_w, target_h = data.xyxy[:, 2] - data.xyxy[:, 0], data.xyxy[:, 3] - data.xyxy[:, 1]
@@ -296,6 +341,7 @@ class MouseThread:
         return False
                 
     def move_mouse(self, x, y):
+
         if x == 0 and y == 0:
             return
         
@@ -345,6 +391,7 @@ class MouseThread:
 
     
     def close_driver(self):
+        self.stop_macro()
         if self.kernel_bypass and self.driver_loaded:
             ctypes.windll.kernel32.CloseHandle(self.handle)
             print("Kernel Bypass Handle geschlossen.")

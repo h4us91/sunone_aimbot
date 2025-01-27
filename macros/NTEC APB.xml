@@ -7,7 +7,6 @@ DPI: 800
 Ingame: 20</Description>
     <Comment></Comment>
     <GUIOption>
-      <RepeatType>1</RepeatType>
     </GUIOption>
     <KeyUp>
       <Syntax></Syntax>
@@ -20,7 +19,7 @@ LeftUp 1
 MoveR 0 -5
 Delay 75 ms</Syntax>
     </KeyDown>
-    <Hotkey>LeftMouseButton</Hotkey>
+    <Hotkey>F8</Hotkey>
     <Software>APB Reloaded</Software>
   </DefaultMacro>
 </Root>
