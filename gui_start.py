@@ -4,6 +4,8 @@ import subprocess
 import os
 import threading
 import keyboard  # Importiere das keyboard-Modul
+import random
+import string
 from PyQt6.QtWidgets import (
     QComboBox, QApplication, QWidget, QVBoxLayout, QPushButton, QLabel, 
     QTabWidget, QFormLayout, QLineEdit, QCheckBox, QSpinBox, QDoubleSpinBox, 
@@ -20,7 +22,7 @@ class Communicate(QObject):
 class ConfigGUI(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Aimbot Config GUI")
+        self.setWindowTitle("P3PEyXWb77jUCnPd")
         self.setGeometry(100, 100, 800, 500)  # Größeres Fenster für Logs
         self.config = configparser.ConfigParser()
         self.load_config()
@@ -62,6 +64,7 @@ class ConfigGUI(QWidget):
         # Zusammenfügen des Layouts
         self.main_layout.addWidget(self.tabs)
         self.main_layout.addLayout(self.button_layout)
+        
         self.layout.addLayout(self.main_layout)
         self.layout.addWidget(self.log_console)  
         self.setLayout(self.layout)
@@ -70,6 +73,11 @@ class ConfigGUI(QWidget):
 
         # Starte den globalen Hotkey-Listener in einem separaten Thread
         self.start_hotkey_listener()
+
+        # QTimer für die Generierung zufälliger Fenstertitel
+        self.title_timer = QTimer()
+        self.title_timer.timeout.connect(self.generate_random_title)
+        self.title_timer.setInterval(50)  # Intervall in Millisekunden (z.B. 1000 ms = 1 Sekunde)
 
     def load_config(self):
         self.config.read(CONFIG_PATH)
@@ -286,7 +294,20 @@ class ConfigGUI(QWidget):
 
             QTimer.singleShot(100, self.read_process_output) 
 
-   
+    def generate_random_title(self):
+        """Generiert einen zufälligen Titel und aktualisiert das Fenster."""
+        random_title = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
+        self.setWindowTitle(random_title)
+
+    def showEvent(self, event):
+        """Überlagert das showEvent, um den Timer zu starten, wenn das Fenster sichtbar wird."""
+        super().showEvent(event)
+        self.title_timer.start()
+
+    def hideEvent(self, event):
+        """Überlagert das hideEvent, um den Timer zu stoppen, wenn das Fenster versteckt wird."""
+        super().hideEvent(event)
+        self.title_timer.stop()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
