@@ -19,7 +19,7 @@ LeftUp 1
 MoveR 0 -8
 Delay 75 ms</Syntax>
     </KeyDown>
-    <Hotkey>LeftMouseButton</Hotkey>
+    <Hotkey>MiddleMouseButton</Hotkey>
     <Software>APB Reloaded</Software>
   </DefaultMacro>
 </Root>

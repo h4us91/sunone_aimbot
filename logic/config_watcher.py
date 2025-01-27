@@ -51,7 +51,7 @@ class Config():
             print(f"[WARNING] Invalid body_y_offset value '{profile_name}', using default 'neck'.")
             profile_name = "neck"
         self.body_y_offset = aim_profiles[profile_name]
-
+        self.aim_active = self.config_Aim.getboolean("aim_active")
         self.hideout_targets = self.config_Aim.getboolean("hideout_targets")
         self.disable_headshot = self.config_Aim.getboolean("disable_headshot")
         self.disable_prediction = self.config_Aim.getboolean("disable_prediction")

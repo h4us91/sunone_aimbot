@@ -1,3 +1,5 @@
+# run.py
+
 from ultralytics import YOLO
 import torch
 from logic.config_watcher import cfg
@@ -87,7 +89,7 @@ def init():
                 
             result = perform_detection(model, image)
 
-            if hotkeys_watcher.app_pause == 0:
+            if cfg.aim_active and hotkeys_watcher.app_pause == 0:
                 frameParser.parse(result)
 
 if __name__ == "__main__":
