@@ -15,25 +15,33 @@ from PyQt6.QtCore import Qt, QTimer, QProcess, pyqtSignal, QObject
 from PyQt6.QtGui import QGuiApplication, QKeyEvent
 from pathlib import Path
 
-CONFIG_PATH = None  # Globale Variable initialisieren
+import sys
+import os
+from pathlib import Path
+
 
 def setup_lib_path():
-    """Setzt den Pfad für `libs/` und `config.ini` und fügt `libs/` zum Python-Pfad hinzu."""
-    global CONFIG_PATH  # Damit `CONFIG_PATH` auch außerhalb dieser Funktion existiert
+    global CONFIG_PATH, BASE_DIR
 
-    # Finde den Base Path (wo die EXE liegt, nicht der Temp-Ordner von PyInstaller)
-    base_path = Path(getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__))))
-    libs_path = base_path / 'libs'
-    config_path = base_path / 'config.ini'
+    if getattr(sys, 'frozen', False):  
+        BASE_DIR = Path(sys.executable).parent  # PyInstaller-EXE
+    else:
+        BASE_DIR = Path(__file__).parent  # Entwicklungsmodus (VSCode)
 
-    # Füge `libs/` zum Python-Pfad hinzu, falls es existiert
-    if libs_path.exists() and str(libs_path) not in sys.path:
-        sys.path.insert(0, str(libs_path))
+    CONFIG_PATH = str(BASE_DIR / 'config.ini')
 
-    # Setze die globale CONFIG_PATH-Variable
-    CONFIG_PATH = str(config_path)
-    
-venv_python = sys.executable
+# Setup-Pfade initialisieren (dies muss direkt aufgerufen werden!)
+setup_lib_path()
+
+# Standardmäßig: Python aus dem aktuellen .venv oder System (VSCode, Entwicklungsmodus)
+venv_python = sys.executable  
+
+# Falls das Programm als EXE läuft, nutze das portable Python
+if getattr(sys, 'frozen', False):
+    portable_python_path = Path(BASE_DIR / "python_runtime" / "python.exe")
+
+    if portable_python_path.exists():
+        venv_python = str(portable_python_path)
 
 class Communicate(QObject):
     toggle_visibility = pyqtSignal()
@@ -328,9 +336,11 @@ class ConfigGUI(QWidget):
         super().hideEvent(event)
         self.title_timer.stop()
 
-if __name__ == "__main__":
-    setup_lib_path()
+def main():
     app = QApplication(sys.argv)
     gui = ConfigGUI()
     gui.show()
     sys.exit(app.exec())
+
+if __name__ == "__main__":
+    main()

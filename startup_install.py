@@ -1,159 +1,166 @@
-import os
-import sys
 import subprocess
-import shutil
-from pathlib import Path
-import configparser
-from PyQt6.QtWidgets import QApplication, QMainWindow, QProgressBar, QPushButton, QVBoxLayout, QWidget, QLabel
-from PyQt6.QtCore import Qt
+import sys
+import os
+import ctypes
+from pkg_resources import get_distribution, DistributionNotFound
 
-class DependencyChecker:
-    def __init__(self):
-        self.base_path = Path(getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__))))
-        self.libs_path = self.base_path / 'libs'
-        
-    def setup_structure(self):
-        """Erstellt den libs Ordner falls nicht vorhanden"""
-        os.makedirs(self.libs_path, exist_ok=True)
+# Stelle sicher, dass das portable Python genutzt wird
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PYTHON_EXE = os.path.join(BASE_DIR, "portable_python", "python.exe")
 
-    def check_dependencies(self):
-        """Prüft die Installation aller benötigten Packages"""
-        required_packages = {
-            # Basis Packages
-            'numpy': 'numpy',
-            'requests': 'requests',
-            'packaging': 'packaging',
-            'asyncio': 'asyncio',
-            'keyboard': 'keyboard',
-            
-            # GUI und System
-            'PyQt6': 'PyQt6',
-            'win32': 'pywin32',
-            'screeninfo': 'screeninfo',
-            'mss': 'mss',
-            'pyserial': 'pyserial',
-            'bettercam': 'bettercam',
-            
-            # ML und Vision
-            'cv2': 'opencv-python',
-            'supervision': 'supervision',
-            'ultralytics': 'ultralytics==8.3.40',  # Spezifische Version
-            'tensorrt': 'tensorrt==10.3.0',  # TensorRT Version
-            'cuda': 'cuda_python',
-            'onnxruntime': 'onnxruntime-gpu'  # GPU Version direkt
-        }
-        
-        missing_packages = []
-        installed_packages = []
-        
-        for package, pip_name in required_packages.items():
-            try:
-                __import__(package)
-                installed_packages.append(pip_name)
-            except ImportError:
-                missing_packages.append(pip_name)
-        
-        return missing_packages, installed_packages
+# Prüfe, ob die portable Python-Version existiert
+if not os.path.exists(PYTHON_EXE):
+    print(f"Fehler: Portable Python wurde nicht gefunden unter {PYTHON_EXE}")
+    sys.exit(1)
 
-    def install_missing_packages(self, packages, progress_callback=None):
-        """Installiert fehlende Packages in den libs Ordner"""
-        if not packages:
+# Liste der erforderlichen Pakete mit spezifischen Versionen
+REQUIRED_PACKAGES = {
+    'cuda-python': '12.8.0',
+    'bettercam': '1.0.0'
+}
+
+# Torch-Pakete mit spezifischem Index-URL und Versionen
+TORCH_PACKAGES = {
+    'torch',
+    'torchvision',
+    'torchaudio'
+}
+TORCH_INDEX_URL = 'https://download.pytorch.org/whl/cu124'
+
+# Installationspfad für Packages
+PACKAGE_PATH = os.path.join(BASE_DIR, "python_runtime", "Lib", "site-packages")
+
+def is_package_installed(package_name, version=None):
+    """
+    Prüft, ob ein Paket installiert ist. Wenn eine Version angegeben ist, wird sie überprüft.
+    """
+    try:
+        dist = get_distribution(package_name)
+        return True if version is None else dist.version == version
+    except DistributionNotFound:
+        return False
+
+def get_missing_packages():
+    """
+    Sammelt alle Pakete, die fehlen oder eine falsche Version haben.
+    """
+    missing = []
+    for package, version in REQUIRED_PACKAGES.items():
+        if not is_package_installed(package, version):
+            missing.append(f"{package}=={version}")
+    
+    for package in TORCH_PACKAGES:
+        if not is_package_installed(package):  # Keine Versionsprüfung für Torch-Pakete
+            missing.append(package)
+    
+    return missing
+
+
+def install_pip():
+    """
+    Installiert `pip`, falls es nicht verfügbar ist.
+    """
+    try:
+        subprocess.check_call([PYTHON_EXE, "-m", "ensurepip"])
+        subprocess.check_call([PYTHON_EXE, "-m", "pip", "install", "--upgrade", "pip"])
+    except subprocess.CalledProcessError:
+        print("Fehler beim Installieren von `pip`.")
+        sys.exit(1)
+
+def install_packages(packages, index_url=None):
+    """
+    Installiert Pakete mit `pip` in den `PACKAGE_PATH`.
+    """
+    if not packages:
+        return
+    
+    print(f"Installiere: {' '.join(packages)}")
+    cmd = [PYTHON_EXE, "-m", "pip", "install", "--target", PACKAGE_PATH, "--no-warn-script-location"]
+    
+    if index_url:
+        cmd += ["--index-url", index_url]
+    
+    cmd += packages
+    
+    try:
+        subprocess.check_call(cmd)
+    except subprocess.CalledProcessError as e:
+        print(f"Fehler bei der Installation: {e}")
+        sys.exit(1)
+
+def prompt_install():
+    """
+    Fragt den Nutzer, ob fehlende Pakete installiert werden sollen.
+    """
+    while True:
+        choice = input("Fehlende Abhängigkeiten erkannt. Installieren? (Y/N): ").strip().lower()
+        if choice == 'y':
             return True
+        elif choice == 'n':
+            print("Beende das Programm.")
+            sys.exit(0)
+        else:
+            print("Bitte gib 'Y' für Ja oder 'N' für Nein ein.")
 
-        total_packages = len(packages)
+def launch_gui():
+    """
+    Startet die GUI-Anwendung mit `gui_start.py`, falls es eingebettet ist.
+    """
+    try:
+        print("Starte GUI...")
+        import gui_start  # Direkt importieren und ausführen
+        gui_start.main()  # Falls `main()` die Hauptfunktion ist
+    except Exception as e:
+        print(f"Fehler beim Starten der GUI: {e}")
+        sys.exit(1)
         
-        for i, package in enumerate(packages):
-            try:
-                # Setze pip install command
-                cmd = [
-                    sys.executable,
-                    "-m",
-                    "pip",
-                    "install",
-                    "--target",
-                    str(self.libs_path),
-                    package
-                ]
-                
-                subprocess.check_call(cmd)
-                
-                if progress_callback:
-                    progress = int(((i + 1) / total_packages) * 100)
-                    progress_callback(progress, f"Installiere {package}...")
-                
-            except subprocess.CalledProcessError as e:
-                print(f"Fehler bei Installation von {package}: {e}")
-                return False
-        
-        # Füge libs Ordner zum Python Path hinzu
-        if str(self.libs_path) not in sys.path:
-            sys.path.insert(0, str(self.libs_path))
-        
-        return True
-
-class LauncherWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.checker = DependencyChecker()
-        self.init_ui()
-        
-    def init_ui(self):
-        self.setWindowTitle('AI Tool Launcher')
-        self.setFixedSize(400, 200)
-        
-        # Zentrales Widget
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        layout = QVBoxLayout(central_widget)
-        
-        # Status Label
-        self.status_label = QLabel('Bereit zum Start')
-        layout.addWidget(self.status_label)
-        
-        # Progress Bar
-        self.progress = QProgressBar()
-        layout.addWidget(self.progress)
-        
-        # Start Button
-        self.start_button = QPushButton('Start AI Tool')
-        self.start_button.clicked.connect(self.start_check)
-        layout.addWidget(self.start_button)
-        
-    def update_progress(self, value, message):
-        self.progress.setValue(value)
-        self.status_label.setText(message)
-        QApplication.processEvents()
-        
-    def start_check(self):
-        self.start_button.setEnabled(False)
-        self.checker.setup_structure()
-        
-        missing, installed = self.checker.check_dependencies()
-        
-        if missing:
-            self.status_label.setText(f"Installation benötigter Packages...")
-            success = self.checker.install_missing_packages(missing, self.update_progress)
-            if not success:
-                self.status_label.setText("Fehler bei der Installation!")
-                return
-        
-        self.status_label.setText("Starte Anwendung...")
-        self.progress.setValue(100)
-        
-        try:
-            # Hier deine gui_start.py starten
-            import gui_start
-            self.close()
-            gui_start.main()
-        except Exception as e:
-            self.status_label.setText(f"Fehler beim Start: {e}")
-            self.start_button.setEnabled(True)
+def close_console():
+        """Schließt die Konsole nach dem Setup, wenn das Programm im Fenster-Modus läuft."""
+        if os.name == 'nt':  # Nur für Windows
+            ctypes.windll.user32.ShowWindow(ctypes.windll.kernel32.GetConsoleWindow(), 0)
 
 def main():
-    app = QApplication(sys.argv)
-    window = LauncherWindow()
-    window.show()
-    sys.exit(app.exec())
+    """
+    Hauptfunktion zur Überprüfung und Installation der Abhängigkeiten.
+    """
+    # Sicherstellen, dass `pip` vorhanden ist
+    #install_pip()
+
+    missing_packages = get_missing_packages()
+    
+    if missing_packages:
+        print("Fehlende oder veraltete Pakete:")
+        for pkg in missing_packages:
+            print(f"- {pkg}")
+        
+        if prompt_install():
+            # Trenne Torch-Pakete von den anderen Paketen
+            torch_to_install = [pkg for pkg in missing_packages if pkg.split("==")[0] in TORCH_PACKAGES]
+            other_packages = [pkg for pkg in missing_packages if pkg.split("==")[0] not in TORCH_PACKAGES]
+            
+            # Installiere reguläre Pakete
+            install_packages(other_packages)
+            
+            # Installiere Torch-Pakete mit spezifischem Index-URL
+            if torch_to_install:
+                install_packages(torch_to_install, index_url=TORCH_INDEX_URL)
+            
+            print("Alle Abhängigkeiten installiert.")
+            
+            # Überprüfe erneut auf fehlende Pakete
+            missing_after_install = get_missing_packages()
+            if missing_after_install:
+                print("Einige Pakete konnten nicht installiert werden:")
+                for pkg in missing_after_install:
+                    print(f"- {pkg}")
+                sys.exit(1)
+
+    else:
+        print("Alle Pakete sind bereits installiert.")
+    
+    close_console()
+ 
+    launch_gui()
 
 if __name__ == "__main__":
     main()
