@@ -1,7 +1,5 @@
-# run.py
-
-from ultralytics import YOLO
 import torch
+from ultralytics import YOLO
 from logic.config_watcher import cfg
 from logic.capture import capture
 from logic.visual import visuals

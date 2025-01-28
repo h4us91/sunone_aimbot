@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 aimdriver/packages/
+libs
 # C extensions
 *.so
 

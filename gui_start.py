@@ -13,8 +13,27 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QTimer, QProcess, pyqtSignal, QObject
 from PyQt6.QtGui import QGuiApplication, QKeyEvent
+from pathlib import Path
 
-CONFIG_PATH = "C:/Users/H4uS/Documents/Git/sunone_aimbot/config.ini"
+CONFIG_PATH = None  # Globale Variable initialisieren
+
+def setup_lib_path():
+    """Setzt den Pfad für `libs/` und `config.ini` und fügt `libs/` zum Python-Pfad hinzu."""
+    global CONFIG_PATH  # Damit `CONFIG_PATH` auch außerhalb dieser Funktion existiert
+
+    # Finde den Base Path (wo die EXE liegt, nicht der Temp-Ordner von PyInstaller)
+    base_path = Path(getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__))))
+    libs_path = base_path / 'libs'
+    config_path = base_path / 'config.ini'
+
+    # Füge `libs/` zum Python-Pfad hinzu, falls es existiert
+    if libs_path.exists() and str(libs_path) not in sys.path:
+        sys.path.insert(0, str(libs_path))
+
+    # Setze die globale CONFIG_PATH-Variable
+    CONFIG_PATH = str(config_path)
+    
+venv_python = sys.executable
 
 class Communicate(QObject):
     toggle_visibility = pyqtSignal()
@@ -47,8 +66,8 @@ class ConfigGUI(QWidget):
         # Log-Konsole (seitlich versteckt)
         self.log_console = QTextEdit()
         self.log_console.setReadOnly(True)
-        self.log_console.setMaximumWidth(400)  # Begrenzte Breite
-        self.log_console.setVisible(False)  # Standardmäßig versteckt
+        self.log_console.setMaximumWidth(400) 
+        self.log_console.setVisible(False) 
         self.log_console.setStyleSheet("background-color: black; color: white; font-family: monospace;")
 
         # Log-Toggle-Button
@@ -262,7 +281,7 @@ class ConfigGUI(QWidget):
             self.process.readyReadStandardOutput.connect(self.handle_stdout)
             self.process.readyReadStandardError.connect(self.handle_stderr)
 
-            self.process.start("python", ["-u", "run.py"])
+            self.process.start(venv_python, ["-u", "run.py"])
             self.start_button.setText("Stop")
         else:
             self.process.terminate()
@@ -310,6 +329,7 @@ class ConfigGUI(QWidget):
         self.title_timer.stop()
 
 if __name__ == "__main__":
+    setup_lib_path()
     app = QApplication(sys.argv)
     gui = ConfigGUI()
     gui.show()
