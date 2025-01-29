@@ -1,6 +1,5 @@
 import sys
 import configparser
-import subprocess
 import os
 import threading
 import keyboard  # Importiere das keyboard-Modul
@@ -11,32 +10,24 @@ from PyQt6.QtWidgets import (
     QTabWidget, QFormLayout, QLineEdit, QCheckBox, QSpinBox, QDoubleSpinBox, 
     QTextEdit, QHBoxLayout, QGroupBox
 )
-from PyQt6.QtCore import Qt, QTimer, QProcess, pyqtSignal, QObject
-from PyQt6.QtGui import QGuiApplication, QKeyEvent
+from PyQt6.QtCore import QTimer, QProcess, pyqtSignal, QObject
 from pathlib import Path
-
-import sys
-import os
-from pathlib import Path
-
 
 def setup_lib_path():
     global CONFIG_PATH, BASE_DIR
-
     if getattr(sys, 'frozen', False):  
-        BASE_DIR = Path(sys.executable).parent  # PyInstaller-EXE
+        BASE_DIR = Path(sys.executable).parent  
     else:
-        BASE_DIR = Path(__file__).parent  # Entwicklungsmodus (VSCode)
+        BASE_DIR = Path(__file__).parent 
 
     CONFIG_PATH = str(BASE_DIR / 'config.ini')
-
-# Setup-Pfade initialisieren (dies muss direkt aufgerufen werden!)
 setup_lib_path()
-
-# Standardmäßig: Python aus dem aktuellen .venv oder System (VSCode, Entwicklungsmodus)
+MACRO_PATH = BASE_DIR / "macros"
+if not MACRO_PATH.exists():
+    print(f"❌ Warnung: Macro-Ordner nicht gefunden: {MACRO_PATH}")
+    
 venv_python = sys.executable  
 
-# Falls das Programm als EXE läuft, nutze das portable Python
 if getattr(sys, 'frozen', False):
     portable_python_path = Path(BASE_DIR / "python_runtime" / "python.exe")
 
@@ -137,7 +128,11 @@ class ConfigGUI(QWidget):
                     macro_layout = QFormLayout()
 
                     # Macro ComboBox
-                    macros = [f for f in os.listdir("macros") if f.endswith(".xml")]
+                    if MACRO_PATH.exists():
+                        macros = [f for f in os.listdir(MACRO_PATH) if f.endswith(".xml")]
+                    else:
+                        macros = []  # Falls der Ordner fehlt, leere Liste
+
                     macro_box = QComboBox()
                     macro_box.addItems(macros)
 
@@ -152,10 +147,9 @@ class ConfigGUI(QWidget):
                         if active_checkbox.isChecked():
                             selected_macro = macro_box.currentText()
                             self.update_config("Macro", "active_macro", selected_macro)
-                            self.log_console.append(f"Active macro set to '{selected_macro}'")
                         else:
                             self.update_config("Macro", "active_macro", "None")
-                            self.log_console.append("Macro deactivated")
+                            self.log_console.append("❌ Macro deactivated")
 
                     macro_box.currentIndexChanged.connect(on_macro_changed)
                     active_checkbox.stateChanged.connect(on_macro_changed)

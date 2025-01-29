@@ -1,4 +1,7 @@
 import torch
+import sys
+import os
+from pathlib import Path
 from ultralytics import YOLO
 from logic.config_watcher import cfg
 from logic.capture import capture
@@ -6,14 +9,21 @@ from logic.visual import visuals
 from logic.frame_parser import frameParser
 from logic.hotkeys_watcher import hotkeys_watcher
 from logic.checks import run_checks
-import supervision as sv  # Import this for ByteTrack
+import supervision as sv  # Import for ByteTrack
+
+def detect_base_dir():
+    if getattr(sys, 'frozen', False):  
+        return Path(sys.executable).parent 
+    else:
+        return Path(__file__).parent 
+
+# Basisverzeichnis bestimmen
+BASE_DIR = detect_base_dir()
 
 @torch.inference_mode()
 def perform_detection(model, image):
-    if cfg.disable_tracker == False:
-        # Initialize ByteTrack
+    if not cfg.disable_tracker:
         byte_tracker = sv.ByteTrack()
-        
         results = model.predict(
             source=image,
             cfg="logic/tracker.yaml",
@@ -36,13 +46,11 @@ def perform_detection(model, image):
             show=False)
         
         for result in results:
-            # Convert each result to detections
             detections = sv.Detections.from_ultralytics(result)
             tracked_detections = byte_tracker.update_with_detections(detections)
-            return tracked_detections  # Assuming you want to return the first frame's detection for simplicity
+            return tracked_detections
         
     else:
-        # If not using tracker, return the first result from the generator
         result = next(model.predict(
             source=image,
             cfg="logic/game.yaml",
@@ -69,11 +77,15 @@ def perform_detection(model, image):
 def init():
     run_checks()
     
+    model_path = BASE_DIR / "models" / cfg.AI_model_name
+    if not model_path.exists():
+        print(f"❌ Fehler: Modell nicht gefunden: {model_path}")
+        sys.exit(1)
     try:
-        model = YOLO(f"models/{cfg.AI_model_name}", task="detect")
+        model = YOLO(str(model_path), task="detect")
     except Exception as e:
-        print("An error occurred when loading the AI model:\n", e)
-        quit(0)
+        print("❌ Fehler beim Laden des AI-Modells:\n", e)
+        sys.exit(1)
     
     while True:
         image = capture.get_new_frame()

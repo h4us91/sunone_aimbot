@@ -1,18 +1,28 @@
 import configparser
-import random
+from pathlib import Path
+import sys
 
 class Config():
     def __init__(self):
         self.config = configparser.ConfigParser()
-        self.window_name = self.get_random_window_name()
+        self.base_dir = self.detect_base_dir()  # Bestimme das Basisverzeichnis
+        self.config_path = self.base_dir / "config.ini"
+        #self.window_name = self.get_random_window_name()
         self.Read(verbose=False)
     
+    def detect_base_dir(self):
+        if getattr(sys, 'frozen', False):  
+            return Path(sys.executable).parent  # PyInstaller-EXE
+        else:
+            return Path(__file__).parent.parent  # Entwicklungsmodus (VSCode)
+
     def Read(self, verbose=False):
+        """Liest die `config.ini` aus dem korrekten Pfad"""
         try:
-            with open("config.ini", "r", encoding="utf-8",) as f:
+            with open(self.config_path, "r", encoding="utf-8") as f:
                 self.config.read_file(f)
         except FileNotFoundError:
-            print("Config file not found!")
+            print(f"❌ Config file not found at: {self.config_path}")
             quit()
         
         aim_profiles = {
@@ -127,7 +137,7 @@ class Config():
         self.spawn_window_pos_y = int(self.config_Debug_window["spawn_window_pos_y"])
         self.debug_window_scale_percent = int(self.config_Debug_window["debug_window_scale_percent"])
         self.debug_window_screenshot_key = str(self.config_Debug_window["debug_window_screenshot_key"])
-        self.debug_window_name = self.window_name
+        #self.debug_window_name = self.window_name
         
         #Macro
         self.config_macro = self.config["Macro"]
@@ -137,7 +147,7 @@ class Config():
         
         if verbose:
             print("Config reloaded")
-            
+'''        
     def get_random_window_name(self):
         try:
             with open("window_names.txt", "r", encoding="utf-8") as file:
@@ -146,5 +156,6 @@ class Config():
         except FileNotFoundError:
             print("window_names.txt file not found, using default window name.")
             return "Calculator"
+    '''             
             
 cfg = Config()

@@ -4,22 +4,34 @@ import os
 import ctypes
 from pkg_resources import get_distribution, DistributionNotFound
 
-# Stelle sicher, dass das portable Python genutzt wird
+
+# Basisverzeichnis und Package-Ordner definieren
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PYTHON_EXE = os.path.join(BASE_DIR, "portable_python", "python.exe")
+PACKAGE_PATH = os.path.join(BASE_DIR)
+PYTHON_PIP = os.path.join(BASE_DIR, "python_runtime", "python.exe")
 
-# Prüfe, ob die portable Python-Version existiert
-if not os.path.exists(PYTHON_EXE):
-    print(f"Fehler: Portable Python wurde nicht gefunden unter {PYTHON_EXE}")
-    sys.exit(1)
 
-# Liste der erforderlichen Pakete mit spezifischen Versionen
 REQUIRED_PACKAGES = {
-    'cuda-python': '12.8.0',
-    'bettercam': '1.0.0'
+    'pathlib': '1.0.1',
+    'PyQt6': '6.8.0',
+    'asyncio': '3.4.3',
+    'bettercam': '1.0.0',
+    'keyboard': '0.13.5',
+    'mss': '10.0.0',
+    'numpy': '2.2.2',
+    'onnxruntime': '1.20.1',
+    'onnxruntime-gpu': '1.20.1',
+    'opencv-python': '4.11.0.86',
+    'packaging': '24.2',
+    'pyserial': '3.5',
+    'pywin32': '308',
+    'screeninfo': '0.8.1',
+    'supervision': '0.25.1',
+    'tensorrt': '10.8.0.43',
+    'ultralytics': '8.3.68',
+    'requests': '2.32.3'
 }
 
-# Torch-Pakete mit spezifischem Index-URL und Versionen
 TORCH_PACKAGES = {
     'torch',
     'torchvision',
@@ -27,8 +39,6 @@ TORCH_PACKAGES = {
 }
 TORCH_INDEX_URL = 'https://download.pytorch.org/whl/cu124'
 
-# Installationspfad für Packages
-PACKAGE_PATH = os.path.join(BASE_DIR, "python_runtime", "Lib", "site-packages")
 
 def is_package_installed(package_name, version=None):
     """
@@ -36,8 +46,10 @@ def is_package_installed(package_name, version=None):
     """
     try:
         dist = get_distribution(package_name)
+        print(f"✅ Paket gefunden: {package_name}")
         return True if version is None else dist.version == version
     except DistributionNotFound:
+        print(f"❌ Paket NICHT gefunden: {package_name}")
         return False
 
 def get_missing_packages():
@@ -45,47 +57,35 @@ def get_missing_packages():
     Sammelt alle Pakete, die fehlen oder eine falsche Version haben.
     """
     missing = []
+
+    # Überprüfe `REQUIRED_PACKAGES` mit fester Version
     for package, version in REQUIRED_PACKAGES.items():
         if not is_package_installed(package, version):
             missing.append(f"{package}=={version}")
-    
+
+    # Überprüfe `TORCH_PACKAGES` ohne feste Version
     for package in TORCH_PACKAGES:
-        if not is_package_installed(package):  # Keine Versionsprüfung für Torch-Pakete
+        if not is_package_installed(package):
             missing.append(package)
     
     return missing
 
-
-def install_pip():
-    """
-    Installiert `pip`, falls es nicht verfügbar ist.
-    """
-    try:
-        subprocess.check_call([PYTHON_EXE, "-m", "ensurepip"])
-        subprocess.check_call([PYTHON_EXE, "-m", "pip", "install", "--upgrade", "pip"])
-    except subprocess.CalledProcessError:
-        print("Fehler beim Installieren von `pip`.")
-        sys.exit(1)
-
-def install_packages(packages, index_url=None):
+def install_packages(packages):
     """
     Installiert Pakete mit `pip` in den `PACKAGE_PATH`.
     """
     if not packages:
         return
-    
-    print(f"Installiere: {' '.join(packages)}")
-    cmd = [PYTHON_EXE, "-m", "pip", "install", "--target", PACKAGE_PATH, "--no-warn-script-location"]
-    
-    if index_url:
-        cmd += ["--index-url", index_url]
-    
+
+    print(f"🔍 Installiere folgende Pakete: {' '.join(packages)}")
+    cmd = [PYTHON_PIP, "-m", "pip", "install", "--target", PACKAGE_PATH, "--no-warn-script-location", "--no-cache-dir"]
     cmd += packages
-    
+
     try:
         subprocess.check_call(cmd)
+        print("✅ Paketinstallation erfolgreich.")
     except subprocess.CalledProcessError as e:
-        print(f"Fehler bei der Installation: {e}")
+        print(f"❌ Fehler bei der Installation: {e}")
         sys.exit(1)
 
 def prompt_install():
@@ -104,63 +104,38 @@ def prompt_install():
 
 def launch_gui():
     """
-    Startet die GUI-Anwendung mit `gui_start.py`, falls es eingebettet ist.
+    Startet die GUI-Anwendung mit `TEST.py`, falls es eingebettet ist.
     """
     try:
-        print("Starte GUI...")
+        print("🚀 Starte GUI...")
         import gui_start  # Direkt importieren und ausführen
         gui_start.main()  # Falls `main()` die Hauptfunktion ist
     except Exception as e:
-        print(f"Fehler beim Starten der GUI: {e}")
+        print(f"❌ Fehler beim Starten der GUI: {e}")
         sys.exit(1)
-        
+
 def close_console():
-        """Schließt die Konsole nach dem Setup, wenn das Programm im Fenster-Modus läuft."""
-        if os.name == 'nt':  # Nur für Windows
-            ctypes.windll.user32.ShowWindow(ctypes.windll.kernel32.GetConsoleWindow(), 0)
+    """Schließt die Konsole nach dem Setup, wenn das Programm im Fenster-Modus läuft."""
+    if os.name == 'nt':  # Nur für Windows
+        ctypes.windll.user32.ShowWindow(ctypes.windll.kernel32.GetConsoleWindow(), 0)
 
 def main():
     """
     Hauptfunktion zur Überprüfung und Installation der Abhängigkeiten.
     """
-    # Sicherstellen, dass `pip` vorhanden ist
-    #install_pip()
 
+    print("\n🔍 Starte Paketprüfung...")
     missing_packages = get_missing_packages()
-    
+
     if missing_packages:
-        print("Fehlende oder veraltete Pakete:")
-        for pkg in missing_packages:
-            print(f"- {pkg}")
-        
         if prompt_install():
-            # Trenne Torch-Pakete von den anderen Paketen
-            torch_to_install = [pkg for pkg in missing_packages if pkg.split("==")[0] in TORCH_PACKAGES]
-            other_packages = [pkg for pkg in missing_packages if pkg.split("==")[0] not in TORCH_PACKAGES]
-            
-            # Installiere reguläre Pakete
-            install_packages(other_packages)
-            
-            # Installiere Torch-Pakete mit spezifischem Index-URL
-            if torch_to_install:
-                install_packages(torch_to_install, index_url=TORCH_INDEX_URL)
-            
-            print("Alle Abhängigkeiten installiert.")
-            
-            # Überprüfe erneut auf fehlende Pakete
+            install_packages(missing_packages)
+            print("🔄 Überprüfe erneut nach Installation...")
             missing_after_install = get_missing_packages()
             if missing_after_install:
-                print("Einige Pakete konnten nicht installiert werden:")
-                for pkg in missing_after_install:
-                    print(f"- {pkg}")
+                print("❌ Einige Pakete konnten nicht installiert werden.")
                 sys.exit(1)
-
-    else:
-        print("Alle Pakete sind bereits installiert.")
-    
-    close_console()
- 
+    print("✅ Alle Pakete sind bereits installiert.")
     launch_gui()
-
 if __name__ == "__main__":
     main()

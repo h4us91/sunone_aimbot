@@ -1,30 +1,39 @@
-# logic/macro.py
-
+import sys
 import xml.etree.ElementTree as ET
 from logic.config_watcher import cfg
+from pathlib import Path
 import time
-import os
+
+
+def detect_base_dir():
+    if getattr(sys, 'frozen', False):  
+        return Path(sys.executable).parent  
+    else:
+        return Path(__file__).parent.parent  
+
+BASE_DIR = detect_base_dir()
+
 
 class Macro:
     def __init__(self, mouse_thread, macro_name=None):
-        self.mouse_thread = mouse_thread  # Referenz zur MouseThread-Instanz
+        self.mouse_thread = mouse_thread 
         if macro_name is None:
             macro_name = cfg.active_macro
 
         if not macro_name or macro_name.lower() == "none":
             raise ValueError("No active macro specified.")
 
-        self.macro_file = os.path.join("macros", f"{macro_name}")
-        if not os.path.exists(self.macro_file):
-            raise FileNotFoundError(f"Macro file '{self.macro_file}' does not exist.")
+        self.macro_file = BASE_DIR / "macros" / macro_name
 
-        print(f"[DEBUG] Loading macro file: {self.macro_file}")  # Debug-Ausgabe
+        # Prüfen, ob die Makro-Datei existiert
+        if not self.macro_file.exists():
+            raise FileNotFoundError(f"❌ Makro-Datei nicht gefunden: {self.macro_file}")
 
         self.tree = ET.parse(self.macro_file)
         self.root = self.tree.getroot()
         self.node = self.root.find(".//DefaultMacro")
         if self.node is None:
-            raise ValueError("No <DefaultMacro> found in XML.")
+            raise ValueError("❌ Kein <DefaultMacro> in XML gefunden.")
 
         self.major = self._get_text("./Major")
         self.description = self._get_text("./Description")
@@ -32,28 +41,22 @@ class Macro:
         self.syntax_key_up = self._get_text("./KeyUp/Syntax")
         self.hotkey = self._get_text("./Hotkey")
         self.software = self._get_text("./Software")
-
+        
     def _get_text(self, xpath):
         el = self.node.find(xpath)
         return el.text.strip() if el is not None and el.text else ""
 
     def run_key_down(self, stop_event=None):
-        print("[DEBUG] Executing KeyDown syntax")
         self._run_syntax(self.syntax_key_down, stop_event)
 
     def run_key_up(self, stop_event=None):
-        print("[DEBUG] Executing KeyUp syntax")
         self._run_syntax(self.syntax_key_up, stop_event)
 
     def _run_syntax(self, syntax, stop_event=None):
         lines = [line.strip() for line in syntax.splitlines() if line.strip()]
         for line in lines:
             if stop_event and stop_event.is_set():
-                print("[DEBUG] Stop event set, exiting macro execution.")
                 break
-
-            print(f"[DEBUG] Running command: {line}")  # Debug-Ausgabe
-
             if line.startswith("LeftDown"):
                 self.mouse_thread.click_mouse_down()
             elif line.startswith("LeftUp"):
