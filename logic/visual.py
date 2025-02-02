@@ -6,7 +6,8 @@ import torch
 import win32gui, win32con
 import win32api
 import os
-
+import random
+import string
 from logic.config_watcher import cfg
 from logic.capture import capture
 from logic.overlay import overlay
@@ -14,7 +15,6 @@ from logic.buttons import Buttons
 
 class Visuals(threading.Thread):
     def __init__(self):
-        overlay.show(cfg.detection_window_width, cfg.detection_window_height)
         
         if cfg.show_window or cfg.show_overlay:
             super(Visuals, self).__init__()
@@ -48,16 +48,17 @@ class Visuals(threading.Thread):
             }
             
             self.disabled_line_classes = [2, 3, 4, 8, 9, 10]
-            self.start()
+            self._running = True
     
     def run(self):
         if cfg.show_window:
             self.spawn_debug_window()
-            prev_frame_time, new_frame_time = 0, 0 if cfg.show_window_fps else None
-            
-        while True:
-            self.image = self.queue.get()
-            
+            prev_frame_time = 0
+        while self._running:
+            try:
+                self.image = self.queue.get(timeout=0.1)
+            except queue.Empty:
+                continue
             if self.image is None:
                 self.destroy()
                 break
@@ -187,18 +188,28 @@ class Visuals(threading.Thread):
                         height = int(cfg.detection_window_height * cfg.debug_window_scale_percent / 100)
                         width = int(cfg.detection_window_width * cfg.debug_window_scale_percent / 100)
                         dim = (width, height)
-                        cv2.resizeWindow(cfg.debug_window_name, dim)
+                        cv2.resizeWindow(self.debug_window_name, dim)
                         resised = cv2.resize(self.image, dim, self.interpolation)
-                        cv2.imshow(cfg.debug_window_name, resised)
+                        cv2.imshow(self.debug_window_name, resised)
                     else:
-                        cv2.imshow(cfg.debug_window_name, self.image)
-                except:
-                    exit(0)
+                        cv2.imshow(self.debug_window_name, self.image)
+                except Exception as e:
+                    print(f'[ERROR] Visuals-Window: {e}')
+                    self.stop()  # Verhindert Endlosschleifen bei Fehlern
+
                 if cv2.waitKey(1) & 0xFF == ord('q'):
-                    break
-                
+                    self.stop()
+
+    
+    def stop(self):
+        self._running = False
+        # Sende Sentinel, um queue.get() zu beenden
+        self.queue.put(None)
+                    
     def spawn_debug_window(self):
-        cv2.namedWindow(cfg.debug_window_name)
+        self.debug_window_name = self.generate_random_title()  # Zufälliger Name
+        cv2.namedWindow(self.debug_window_name)
+
         if cfg.debug_window_always_on_top:
             try:
                 x = cfg.spawn_window_pos_x
@@ -207,11 +218,15 @@ class Visuals(threading.Thread):
                     x = 0
                 if y <= -1:
                     y = 0
-                debug_window_hwnd = win32gui.FindWindow(None, cfg.debug_window_name)
+                debug_window_hwnd = win32gui.FindWindow(None, self.debug_window_name)
                 win32gui.SetWindowPos(debug_window_hwnd, win32con.HWND_TOPMOST, x, y, cfg.detection_window_width, cfg.detection_window_height, 0)
             except Exception as e:
                 print(f'Error with on top window, skipping this option `debug_window_always_on_top`: {e}')
-                
+
+    def generate_random_title(self):
+        return ''.join(random.choices(string.ascii_letters + string.digits, k=16))
+
+                    
     def draw_target_line(self, target_x, target_y, target_cls):
         if target_cls not in self.disabled_line_classes:
             self.draw_line_data = (target_x, target_y)

@@ -5,9 +5,10 @@ from screeninfo import get_monitors
 import threading
 import queue
 import ctypes
+import time
 import numpy as np
-
 from logic.config_watcher import cfg
+
 
 class Capture(threading.Thread):
     def __init__(self):
@@ -16,7 +17,7 @@ class Capture(threading.Thread):
         self.name = "Capture"
         
         self.print_startup_messages()
-        
+        self._running = True
         self._custom_region = []
         self._offset_x = None
         self._offset_y = None
@@ -29,7 +30,6 @@ class Capture(threading.Thread):
         self.prev_bettercam_capture_fps = cfg.bettercam_capture_fps
         
         self.frame_queue = queue.Queue(maxsize=1)
-        self.running = True
     
         if cfg.Bettercam_capture:
             self.setup_bettercam()
@@ -37,6 +37,24 @@ class Capture(threading.Thread):
             self.setup_obs()
         elif cfg.mss_capture:
             self.setup_mss()
+
+    
+    def run(self):
+        while self._running:
+            frame = self.capture_frame()
+            if frame is not None:
+                if self.frame_queue.full():
+                    self.frame_queue.get()
+                self.frame_queue.put(frame)
+            time.sleep(0.01)  
+            
+    def stop(self):
+        self._running = False
+        if cfg.Bettercam_capture and hasattr(self, 'bc') and self.bc.is_capturing:
+            self.bc.stop()
+        if cfg.Obs_capture and hasattr(self, 'obs_camera'):
+            self.obs_camera.release()
+        self.join()                      
 
     def setup_bettercam(self):
         self.bc = bettercam.create(
@@ -71,13 +89,6 @@ class Capture(threading.Thread):
         left, top, width, height = self.calculate_mss_offset()
         self.monitor = {"left": left, "top": top, "width": width, "height": height}
 
-    def run(self):
-        while self.running:
-            frame = self.capture_frame()
-            if frame is not None:
-                if self.frame_queue.full():
-                    self.frame_queue.get()
-                self.frame_queue.put(frame)
             
     def capture_frame(self):
         if cfg.Bettercam_capture:
@@ -181,13 +192,4 @@ class Capture(threading.Thread):
         cv2.ellipse(mask, (width // 2, height // 2), (width // 2, height // 2), 0, 0, 360, 255, -1)
         return cv2.bitwise_and(image, cv2.merge([mask, mask, mask]))
     
-    def Quit(self):
-        self.running = False
-        if cfg.Bettercam_capture and hasattr(self, 'bc') and self.bc.is_capturing:
-            self.bc.stop()
-        if cfg.Obs_capture and hasattr(self, 'obs_camera'):
-            self.obs_camera.release()
-        self.join()
-
 capture = Capture()
-capture.start()

@@ -10,7 +10,7 @@ if os.name == "nt":
 # Basisverzeichnis und Package-Ordner definieren
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PACKAGE_PATH = BASE_DIR
-PYTHON_PIP = sys.executable
+PYTHON_PIP = os.path.join(BASE_DIR, "python_runtime", "python.exe")
 
 
 TORCH_PACKAGES = ['torch', 'torchvision', 'torchaudio']
@@ -37,7 +37,7 @@ OPTIONAL_PACKAGES = [
     'keyboard',
     'mss',
     'supervision',
-
+    'PyQt6'
 ]
 
 def is_package_installed(package_name, version=None):

@@ -141,7 +141,11 @@ class Config():
         
         #Macro
         self.config_macro = self.config["Macro"]
-        self.active_macro = str(self.config_macro["active_macro"])
+        self.primary_macro = str(self.config_macro["primary_macro"])
+        self.secondary_macro = str(self.config_macro["secondary_macro"])
+        self.switch_key = str(self.config_macro["switch_key"])
+        self.fire_key = str(self.config_macro["fire_key"])
+        
         
         
         

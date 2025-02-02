@@ -11,35 +11,19 @@ if cfg.mouse_rzr:
 
 if cfg.arduino_move or cfg.arduino_shoot:
     from logic.arduino import arduino
-
-# Falls wir den Kernel Bypass verwenden:
-if cfg.kernel_bypass:
-    import ctypes
-    from logic.driver.driver_logic import IOCTL_MOUSE_MOVE, Request
-    def send_mouse_move(handle, x, y, button_flags=0):
-        request = Request(int(x), int(y), button_flags)
-        bytes_returned = ctypes.c_ulong(0)
-        return ctypes.windll.kernel32.DeviceIoControl(
-            handle,
-            IOCTL_MOUSE_MOVE,
-            ctypes.byref(request),
-            ctypes.sizeof(request),
-            ctypes.byref(request),
-            ctypes.sizeof(request),
-            ctypes.byref(bytes_returned),
-            None
-        )
+    
 
 class Shooting(threading.Thread):
     def __init__(self):
         super(Shooting, self).__init__()
         self.queue = queue.Queue(maxsize=1)
         self.daemon = True
+        self._running = True
         self.name = 'Shooting'
         self.button_pressed = False
+        
         self.ghub = gHub
-        self.start()
-
+        self.kernel_bypass = cfg.kernel_bypass
         if cfg.mouse_rzr:
             dll_name = "rzctl.dll"
             script_directory = os.path.dirname(os.path.abspath(__file__))
@@ -48,13 +32,18 @@ class Shooting(threading.Thread):
             if not self.rzr.init():
                 print("Failed to initialize rzctl")
         
-        # Kernel-Handle ggf. aus mouse.py holen (z.B. MouseThread().handle)
+        if self.kernel_bypass:
+            from logic.driver.driver_logic import KernelDriver
+            self.driver = KernelDriver()
 
 
     def run(self):
-        while True:
-            bScope, shooting_state = self.queue.get()
-            self.shoot(bScope, shooting_state)
+        while self._running:
+            try:
+                bScope, shooting_state = self.queue.get(timeout=0.1)  # Timeout hinzufügen
+                self.shoot(bScope, shooting_state)
+            except queue.Empty:
+                continue  # Keine neuen Aufgaben, fortfahren
             
     def shoot(self, bScope, shooting_state):
         # Bedingung: auto_shoot/triggerbot + bScope
@@ -79,8 +68,8 @@ class Shooting(threading.Thread):
             self.ghub.mouse_down()
         elif cfg.arduino_shoot:
             arduino.press()
-        elif cfg.kernel_bypass and self.kernel_handle:
-            send_mouse_move(self.kernel_handle, 0, 0, 0x01)  # Button down
+        elif self.kernel_bypass:
+            self.driver.click_mouse_down()
         else:
             win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
         self.button_pressed = True
@@ -92,10 +81,17 @@ class Shooting(threading.Thread):
             self.ghub.mouse_up()
         elif cfg.arduino_shoot:
             arduino.release()
-        elif cfg.kernel_bypass and self.kernel_handle:
-            send_mouse_move(self.kernel_handle, 0, 0, 0x02)  # Button up
+        elif self.kernel_bypass:
+            self.driver.click_mouse_up()
         else:
             win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
         self.button_pressed = False
 
+    def stop(self):
+        self._running = False
+        if cfg.mouse_rzr and hasattr(self, 'rzr'):
+            self.rzr.cleanup()
+        # Weitere Aufräumarbeiten hier
+        self.join()
+        
 shooting = Shooting()

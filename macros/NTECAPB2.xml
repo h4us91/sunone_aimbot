@@ -14,12 +14,12 @@ Ingame: 20</Description>
     <KeyDown>
       <Syntax>LeftDown 1
 LeftDown 1
-MoveR 0 22
+MoveR 0 80
 LeftUp 1
 MoveR 0 -8
 Delay 75 ms</Syntax>
     </KeyDown>
-    <Hotkey>MiddleMouseButton</Hotkey>
     <Software>APB Reloaded</Software>
   </DefaultMacro>
 </Root>
+

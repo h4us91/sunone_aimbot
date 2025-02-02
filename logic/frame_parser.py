@@ -4,11 +4,10 @@ from logic.config_watcher import cfg
 from logic.capture import capture
 from logic.visual import visuals
 from logic.mouse import mouse
-from logic.shooting import shooting
 import supervision as sv
 import numpy as np
 import cv2
-
+ 
 
 class Target:
     def __init__(self, x, y, w, h, cls):

@@ -4,6 +4,7 @@ __pycache__/
 *$py.class
 aimdriver/packages/
 libs
+temp
 python_runtime
 # C extensions
 *.so

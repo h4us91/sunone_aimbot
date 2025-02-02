@@ -2,16 +2,15 @@ import sys
 import configparser
 import os
 import threading
-import keyboard  # Importiere das keyboard-Modul
+import keyboard  
 import random
 import string
-from PyQt6.QtWidgets import (
-    QComboBox, QApplication, QWidget, QVBoxLayout, QPushButton, QLabel, 
-    QTabWidget, QFormLayout, QLineEdit, QCheckBox, QSpinBox, QDoubleSpinBox, 
-    QTextEdit, QHBoxLayout, QGroupBox
-)
+from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QLabel, QTabWidget, QFormLayout, QLineEdit, QCheckBox, QSpinBox, QDoubleSpinBox, QTextEdit, QHBoxLayout, QGroupBox, QComboBox
+from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import QTimer, QProcess, pyqtSignal, QObject
 from pathlib import Path
+from logic.macro import MacroLoader
+import time
 
 def setup_lib_path():
     global CONFIG_PATH, BASE_DIR
@@ -45,6 +44,9 @@ class ConfigGUI(QWidget):
         self.config = configparser.ConfigParser()
         self.load_config()
         self.mouse = None
+        self.run_module = None
+        icon_path = os.path.join(os.path.dirname(__file__), "assets", "inosuke.ico")  
+        self.setWindowIcon(QIcon(icon_path))
 
         # Kommunikationsobjekt für Signal-Slot-Mechanismus
         self.comm = Communicate()
@@ -66,11 +68,11 @@ class ConfigGUI(QWidget):
         self.log_console = QTextEdit()
         self.log_console.setReadOnly(True)
         self.log_console.setMaximumWidth(400) 
-        self.log_console.setVisible(False) 
+        self.log_console.setVisible(True) 
         self.log_console.setStyleSheet("background-color: black; color: white; font-family: monospace;")
 
         # Log-Toggle-Button
-        self.toggle_log_button = QPushButton("Show Logs")
+        self.toggle_log_button = QPushButton("Hide Logs")
         self.toggle_log_button.clicked.connect(self.toggle_log_console)
 
         # Layout für die Buttons
@@ -107,13 +109,10 @@ class ConfigGUI(QWidget):
             "Mouse | Arduino": ["Mouse", "Arduino"],
             "Capture Window": ["Detection window", "Capture Methods"],
             "Overlay | Debug Window": ["overlay", "Debug window"],
-            # Füge hier weitere gruppierte Tabs hinzu, falls benötigt
         }
-
-        # Halte den Überblick über bereits gruppierte Sektionen
+        
         grouped_sections = set()
-
-        # Erstelle gruppierte Tabs
+            
         for tab_name, sections in grouped_tabs.items():
             tab = QWidget()
             tab_layout = QVBoxLayout()
@@ -123,47 +122,47 @@ class ConfigGUI(QWidget):
                     continue  # Überspringe, wenn die Sektion nicht existiert
 
                 if section == "Macro":
-                    # Spezialbehandlung für den Macro-Abschnitt
                     macro_group = QGroupBox(section)
                     macro_layout = QFormLayout()
+                    macro_loader = MacroLoader()
+                    macros = macro_loader.get_all_macros()  # Holt alle verfügbaren Makros als Liste
 
-                    # Macro ComboBox
-                    if MACRO_PATH.exists():
-                        macros = [f for f in os.listdir(MACRO_PATH) if f.endswith(".xml")]
-                    else:
-                        macros = []  # Falls der Ordner fehlt, leere Liste
+                    # Primary Macro Dropdown
+                    primary_macro_box = QComboBox()
+                    primary_macro_box.addItems(macros)
+                    primary_macro_box.setCurrentText(
+                        self.config["Macro"].get("primary_macro", "None") if "Macro" in self.config else "None"
+                    )
+                    primary_macro_box.currentIndexChanged.connect(
+                        lambda: self.config.set("Macro", "primary_macro", primary_macro_box.currentText())
+                    )
 
-                    macro_box = QComboBox()
-                    macro_box.addItems(macros)
+                    # Secondary Macro Dropdown
+                    secondary_macro_box = QComboBox()
+                    secondary_macro_box.addItems(macros)
+                    secondary_macro_box.setCurrentText(
+                        self.config["Macro"].get("secondary_macro", "None") if "Macro" in self.config else "None"
+                    )
+                    secondary_macro_box.currentIndexChanged.connect(
+                        lambda: self.config.set("Macro", "secondary_macro", secondary_macro_box.currentText())
+                    )
 
-                    current_macro = self.config["Macro"].get("active_macro", "None")
-                    active_checkbox = QCheckBox("Active")
-                    
-                    if current_macro != "None" and current_macro in macros:
-                        macro_box.setCurrentText(current_macro)
-                        active_checkbox.setChecked(True)
+                    # Switch Key Input
+                    switch_key_edit = QLineEdit(self.config["Macro"].get("switch_key", "Tab"))
+                    switch_key_edit.textChanged.connect(lambda val: self.config.set("Macro", "switch_key", val))
 
-                    def on_macro_changed():
-                        if active_checkbox.isChecked():
-                            selected_macro = macro_box.currentText()
-                            self.update_config("Macro", "active_macro", selected_macro)
-                        else:
-                            self.update_config("Macro", "active_macro", "None")
-                            self.log_console.append("❌ Macro deactivated")
+                    # Fire Key Input
+                    fire_key_edit = QLineEdit(self.config["Macro"].get("fire_key", "MiddleMouseButton"))
+                    fire_key_edit.textChanged.connect(lambda val: self.config.set("Macro", "fire_key", val))
 
-                    macro_box.currentIndexChanged.connect(on_macro_changed)
-                    active_checkbox.stateChanged.connect(on_macro_changed)
-
-                    # Hotkey Edit
-                    hotkey_edit = QLineEdit(self.config["Hotkeys"].get("hotkey_targeting", "LeftMouseButton"))
-                    hotkey_edit.textChanged.connect(lambda val: self.update_config("Hotkeys", "hotkey_targeting", val))
-
-                    macro_layout.addRow("Macro:", macro_box)
-                    macro_layout.addRow("Active:", active_checkbox)
-                    macro_layout.addRow("Hotkey:", hotkey_edit)
+                    macro_layout.addRow("Primary Macro:", primary_macro_box)
+                    macro_layout.addRow("Secondary Macro:", secondary_macro_box)
+                    macro_layout.addRow("Switch Key:", switch_key_edit)
+                    macro_layout.addRow("Fire Key:", fire_key_edit)
 
                     macro_group.setLayout(macro_layout)
                     tab_layout.addWidget(macro_group)
+                    
                 else:
                     # Allgemeine Sektionen
                     group_box = QGroupBox(section)
@@ -177,13 +176,11 @@ class ConfigGUI(QWidget):
                     group_box.setLayout(form_layout)
                     tab_layout.addWidget(group_box)
 
-                grouped_sections.add(section)
+                grouped_sections.add(section)    
 
-            tab_layout.addStretch()
             tab.setLayout(tab_layout)
             self.tabs.addTab(tab, tab_name)
-
-        # Erstelle einzelne Tabs für Sektionen, die nicht gruppiert sind
+            
         for section in self.config.sections():
             if section in grouped_sections:
                 continue  # Bereits gruppiert
@@ -199,9 +196,11 @@ class ConfigGUI(QWidget):
                 if widget:
                     form_layout.addRow(QLabel(key.replace('_', ' ').capitalize()), widget)
 
+            tab_layout.addStretch()
             tab.setLayout(form_layout)
             self.tabs.addTab(tab, section)
 
+                    
     def create_widget(self, section, key, value):
         """Hilfsfunktion zur Erstellung von Widgets basierend auf dem Werttyp."""
         if value.lower() in ["true", "false"]:
@@ -257,10 +256,8 @@ class ConfigGUI(QWidget):
         """Schaltet die Sichtbarkeit der GUI um."""
         if self.isVisible():
             self.hide()
-            self.log_console.append("GUI versteckt!")
         else:
             self.show()
-            self.log_console.append("GUI angezeigt!")
 
     def update_config(self, section, key, value):
         self.config.set(section, key, value)
@@ -269,27 +266,48 @@ class ConfigGUI(QWidget):
         with open(CONFIG_PATH, "w") as configfile:
             self.config.write(configfile)
         self.log_console.append("Config saved!")
-
+        
     def toggle_program(self):
         if self.process is None:
             current_macro = self.config["Macro"].get("active_macro", "None")
             if current_macro != "None":
                 self.log_console.append(f"WARNING: Active macro '{current_macro}'")
             self.save_config()
-            self.process = QProcess()
-            self.process.setWorkingDirectory(os.path.dirname(CONFIG_PATH))
-            self.process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
-            
-            self.process.readyReadStandardOutput.connect(self.handle_stdout)
-            self.process.readyReadStandardError.connect(self.handle_stderr)
+            self.log_console.append("🚀 Starte...")
 
-            self.process.start(venv_python, ["-u", "run.py"])
+            if not self.run_module:
+                import run
+                self.run_module = run
+
+            self.process = threading.Thread(target=self.run_module.main, daemon=True, name="GUI")
+            self.process.start()
+            self.fetch_logs()
             self.start_button.setText("Stop")
         else:
-            self.process.terminate()
+            if self.run_module:
+                self.run_module.stop()
+                self.log_console.append("🛑 Stop requested!")
+                if self.process.is_alive():
+                    self.process.join(timeout=2.0)
+                # Run-Modul leeren, damit beim nächsten Start ein frisches Modul importiert wird
+                self.run_module = None
             self.process = None
-            self.log_console.clear()
             self.start_button.setText("Start")
+
+
+
+
+                    
+    def fetch_logs(self):
+        if self.run_module is None:
+            return
+        while not self.run_module.log_queue.empty():
+            line = self.run_module.log_queue.get()
+            self.log_console.append(line.rstrip())
+        if self.process and self.process.is_alive():
+            QTimer.singleShot(100, self.fetch_logs)
+
+
 
     def handle_stdout(self):
         text = self.process.readAllStandardOutput().data().decode()
@@ -302,18 +320,6 @@ class ConfigGUI(QWidget):
     def toggle_log_console(self):
         self.log_console.setVisible(not self.log_console.isVisible())
         self.toggle_log_button.setText("Hide Logs" if self.log_console.isVisible() else "Show Logs")
-
-    def read_process_output(self):
-        if self.process:
-            output = self.process.stdout.readline()
-            error = self.process.stderr.readline()
-
-            if output:
-                self.log_console.append(output.strip())
-            if error:
-                self.log_console.append(f"<span style='color:red;'>{error.strip()}</span>")
-
-            QTimer.singleShot(100, self.read_process_output) 
 
     def generate_random_title(self):
         """Generiert einen zufälligen Titel und aktualisiert das Fenster."""
