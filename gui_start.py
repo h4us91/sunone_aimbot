@@ -274,11 +274,15 @@ class ConfigGUI(QWidget):
                 self.log_console.append(f"WARNING: Active macro '{current_macro}'")
             self.save_config()
             self.log_console.append("🚀 Starte...")
-
-            if not self.run_module:
+            
+            # Always reload the run module
+            import importlib
+            if self.run_module:
+                importlib.reload(self.run_module)
+            else:
                 import run
                 self.run_module = run
-
+                
             self.process = threading.Thread(target=self.run_module.main, daemon=True, name="GUI")
             self.process.start()
             self.fetch_logs()
@@ -289,8 +293,6 @@ class ConfigGUI(QWidget):
                 self.log_console.append("🛑 Stop requested!")
                 if self.process.is_alive():
                     self.process.join(timeout=2.0)
-                # Run-Modul leeren, damit beim nächsten Start ein frisches Modul importiert wird
-                self.run_module = None
             self.process = None
             self.start_button.setText("Start")
 

@@ -100,7 +100,7 @@ class Overlay(threading.Thread):
             self.root.quit()
             #self.root.destroy()
             self.root = None
-            self.join()
+
 
 # Globale Instanz, ähnlich wie bei Visuals:
 overlay = Overlay()

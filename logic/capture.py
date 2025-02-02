@@ -54,7 +54,7 @@ class Capture(threading.Thread):
             self.bc.stop()
         if cfg.Obs_capture and hasattr(self, 'obs_camera'):
             self.obs_camera.release()
-        self.join()                      
+                      
 
     def setup_bettercam(self):
         self.bc = bettercam.create(

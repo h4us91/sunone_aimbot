@@ -62,6 +62,6 @@ class HotkeysWatcher(threading.Thread):
 
     def stop(self):
         self._running = False
-        self.join()
+
 
 hotkeys_watcher = HotkeysWatcher()

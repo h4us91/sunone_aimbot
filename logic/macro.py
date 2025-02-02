@@ -37,7 +37,7 @@ class MacroThread(threading.Thread):
     def stop(self):
         """Beendet den Makro-Thread sauber."""
         self.running = False
-        self.join()
+     
 
 
 class MacroLoader:

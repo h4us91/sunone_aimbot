@@ -92,6 +92,6 @@ class Shooting(threading.Thread):
         if cfg.mouse_rzr and hasattr(self, 'rzr'):
             self.rzr.cleanup()
         # Weitere Aufräumarbeiten hier
-        self.join()
+       
         
 shooting = Shooting()

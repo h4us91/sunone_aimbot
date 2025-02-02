@@ -19,9 +19,7 @@ import time
 
 # --- Log Queue Setup ---
 log_queue = queue.Queue()
-# Event für Thread-Kontrolle
 running = threading.Event()
-running.set()  # Standardmäßig läuft das Programm
 
 class QueueWriter:
     def write(self, text):
@@ -40,6 +38,51 @@ def detect_base_dir():
         return Path(__file__).parent 
 
 BASE_DIR = detect_base_dir()
+
+class ThreadManager:
+    def __init__(self):
+        self.threads = []
+        self.model = None
+        
+    def create_threads(self):
+        # Reset all thread instances
+        capture.__init__()
+        shooting.__init__()
+        visuals.__init__()
+        hotkeys_watcher.__init__()
+        if cfg.primary_macro or cfg.secondary_macro:
+            macro.__init__()
+        if cfg.show_overlay:
+            overlay.__init__()
+            
+        # Create thread list
+        self.threads = [capture, shooting, visuals, hotkeys_watcher]
+        if cfg.primary_macro or cfg.secondary_macro:
+            self.threads.append(macro)
+        if cfg.show_overlay:
+            self.threads.append(overlay)
+    
+    def start_threads(self):
+        for thread in self.threads:
+            if thread == overlay:
+                thread.start()
+            else:
+                thread.start()
+                
+    def stop_threads(self):
+            # Erst alle Threads stoppen
+            for thread in self.threads:
+                if thread.is_alive():
+                    thread.stop()  # Setzt nur das Stop-Signal
+            
+            # Dann auf alle Threads warten
+            for thread in self.threads:
+                if thread.is_alive():
+                    thread.join(timeout=2.0)  # Join von außen aufrufen
+                    
+            self.threads.clear()
+
+thread_manager = ThreadManager()
 
 @torch.inference_mode()
 def perform_detection(model, image):
@@ -94,22 +137,12 @@ def perform_detection(model, image):
         return result
 
 def init():
-    running.set()  
+    running.set()
     run_checks()
     model_path = BASE_DIR / "models" / cfg.AI_model_name
     
-    threads = [capture, shooting, visuals, hotkeys_watcher]
-    if cfg.primary_macro or cfg.secondary_macro:
-        threads.append(macro)
-    if cfg.show_overlay:
-        threads.append(overlay)
-
-    # Starte alle Threads
-    for thread in threads:
-        if thread == overlay:
-            thread.start()
-        else:
-            thread.start()
+    thread_manager.create_threads()
+    thread_manager.start_threads()
         
     if not model_path.exists():
         print(f"Fehler: Modell nicht gefunden: {model_path}")
@@ -122,7 +155,7 @@ def init():
         return  
     
     try:
-        while running.is_set():  # Nutze running Event statt stop_flag
+        while running.is_set():
             image = capture.get_new_frame()
             if image is not None:
                 if cfg.circle_capture:
@@ -142,17 +175,16 @@ def init():
                 torch.cuda.empty_cache()
             del model
             
-        for thread in threads:
-            thread.stop()
+        thread_manager.stop_threads()
 
 def main():
-    running.set()  # Setze running Event
+    running.set()
     init()
 
 def stop():
-    running.clear()  # Clear running Event
+    running.clear()
     if torch.cuda.is_available():
-        torch.cuda.synchronize()  # Warte auf CUDA-Operationen
+        torch.cuda.synchronize()
 
 if __name__ == "__main__":
     main()
