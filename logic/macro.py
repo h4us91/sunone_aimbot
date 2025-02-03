@@ -132,7 +132,6 @@ class Macro:
             print(f"[ERROR] Ungültige Koordinaten für MoveR: {x}, {y}")
 
     def _execute_delay(self, line, stop_event):
-        """Fügt eine Verzögerung hinzu, die auf Stop-Events reagiert."""
         parts = line.split()
         if len(parts) < 2:
             print(f"[ERROR] Ungültiger Delay-Befehl: {line}")
@@ -142,7 +141,6 @@ class Macro:
             total_sleep = ms / 1000.0
             sleep_interval = min(0.1, total_sleep)
             slept = 0
-
             while slept < total_sleep:
                 if stop_event and stop_event.is_set():
                     return
@@ -150,6 +148,7 @@ class Macro:
                 slept += sleep_interval
         except ValueError:
             print(f"[ERROR] Ungültige Zeit für Delay: {parts[1]}")
+
 
 
 class MacroManager:
@@ -182,10 +181,12 @@ class MacroManager:
         print(f"[INFO] Wechsel zu Makro: {self.current_macro}")
 
     def _execute_macro(self):
-        """Führt das aktuelle Makro aus."""
         if not self.current_macro:
             return
-        macro = Macro(self.current_macro)
-        macro.execute(macro.syntax_key_down)
-        macro.execute(macro.syntax_key_up)
+        macro_inst = Macro(self.current_macro)
+        # Wiederhole die Ausführung, solange der Fire-Key gedrückt ist:
+        while self._is_key_pressed(self.fire_key):
+            macro_inst.execute(macro_inst.syntax_key_down)
+            macro_inst.execute(macro_inst.syntax_key_up)
+
 

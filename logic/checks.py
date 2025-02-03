@@ -38,6 +38,9 @@ def check_model_fp16():
     return False
 
 def Warnings():
+        print("--------------------------------------------------------------------------------------") 
+        print("This is an external program, making bans less likely compared to internal cheats. For the safest experience, Arduino-based bypasses are recommended for anti-cheats like Vanguard and FACEIT. `win32api` can work for Fortnite and some EAC/BE-protected games but may be detected. Kernel bypass uses an unsigned IOCTL driver with kdmapper—only use it for older games with kernel-level anti-cheat. Use all methods at your own risk!")
+        print("--------------------------------------------------------------------------------------") 
         if ".pt" in cfg.AI_model_name:
             print("WARNING: Export the model to `.engine` for better performance!\nHOW TO EXPORT TO ENGINE: 'https://github.com/SunOner/sunone_aimbot_docs/blob/main/ai_models/ai_models.md'")
         if cfg.show_window:
@@ -54,7 +57,7 @@ def Warnings():
         if cfg.disable_tracker == True:
             print("ultralytics tracking system causes more overhead compute power, might cause performance issues")
         # mouse
-        if cfg.mouse_ghub == False and cfg.arduino_move == False and cfg.arduino_shoot == False:
+        if cfg.mouse_ghub == False and cfg.arduino_move == False and cfg.arduino_shoot == False and cfg.kernel_bypass == False:
             print("WARNING: win32api is detected in some games.")
         if cfg.mouse_ghub and cfg.arduino_move == False and cfg.arduino_shoot == False:
             print("WARNING: ghub is detected in some games.")
@@ -67,7 +70,9 @@ def Warnings():
 
         selected_methods = sum([cfg.arduino_move, cfg.mouse_ghub, cfg.mouse_rzr, cfg.kernel_bypass])
         if selected_methods > 1:
-            raise ValueError("WARNING: You use more than one mouse input method.")
+            print("WARNING: Multiple mouse input methods are enabled. This can cause conflicts and unexpected behavior. Please check the mouse settings tab and select only one preferred input method for optimal performance.")
+            quit()
+            
         
 def run_checks():
     if torch.cuda.is_available() is False:

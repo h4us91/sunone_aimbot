@@ -3,6 +3,7 @@ import os
 import base64
 import tempfile
 import subprocess
+import sys
 from logic.driver.driver_data import DRIVER_SYS_B64, MAPPER_EXE_B64
 
 FILE_DEVICE_UNKNOWN = 0x22
@@ -34,20 +35,27 @@ class KernelDriver:
             cls._instance.init_kernel_driver()
         return cls._instance
 
+
     def load_kernel_driver(self):
         """ Lädt den Kernel-Treiber nur einmal """
         if self._driver_loaded:
             return
-        
+
         temp_dir = tempfile.gettempdir()
         driver_path = os.path.join(temp_dir, "driver.sys")
-        mapper_path = os.path.join(temp_dir, "mapper.exe")
+        
+        if getattr(sys, 'frozen', False):
+            base_dir = os.path.dirname(sys.executable)
+        else:
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+        
+
+        mapper_path = os.path.join(base_dir,"mapper.exe")
 
         try:
+            # Driver aus Base64 decodieren und in temp speichern
             with open(driver_path, "wb") as f:
                 f.write(base64.b64decode(DRIVER_SYS_B64))
-            with open(mapper_path, "wb") as f:
-                f.write(base64.b64decode(MAPPER_EXE_B64))
 
             result = subprocess.run([mapper_path, driver_path], capture_output=True, text=True)
             if result.returncode == 0:
@@ -60,10 +68,10 @@ class KernelDriver:
             print(f"[ERROR] Kernel Bypass: {e}")
 
         finally:
-            # Aufräumen
-            for p in [driver_path, mapper_path]:
-                if os.path.exists(p):
-                    os.remove(p)
+            if os.path.exists(driver_path):
+                os.remove(driver_path)
+
+
 
     def init_kernel_driver(self):
         """ Initialisiert den Treiber und speichert das Handle """

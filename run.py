@@ -21,9 +21,13 @@ import time
 log_queue = queue.Queue()
 running = threading.Event()
 
+
 class QueueWriter:
     def write(self, text):
         if text.strip():
+            # Füge hier die Logik für farbige Warnungen ein
+            if "WARNING" in text:
+                text = f'<span style="color: red; font-weight: bold;">{text}</span>'
             log_queue.put(text)
     def flush(self):
         pass

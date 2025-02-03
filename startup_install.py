@@ -37,7 +37,7 @@ OPTIONAL_PACKAGES = [
     'keyboard',
     'mss',
     'supervision',
-
+    'dill'
 ]
 
 def is_package_installed(package_name, version=None):
@@ -64,7 +64,7 @@ def install_torch():
     """
     print("🔍 Installiere Torch-Pakete...")
     cmd = [
-        PYTHON_PIP, "-m", "pip", "install", "--target", PACKAGE_PATH,
+        "pip", "install", "--target", PACKAGE_PATH,
         "--no-warn-script-location",
         "--index-url", TORCH_INDEX_URL
     ] + TORCH_PACKAGES
@@ -104,8 +104,8 @@ def install_packages(packages):
 
     print(f"🔍 Installiere folgende Pakete: {' '.join(packages)}")
     cmd = [
-        PYTHON_PIP, "-m", "pip", "install",
-        "--target", PACKAGE_PATH, "--no-warn-script-location"
+        "pip", "install",
+        "--target", PACKAGE_PATH, "--no-warn-script-location", "--no-cache-dir"
     ] + packages
 
     try:
@@ -136,15 +136,10 @@ def launch_gui():
     try:
         print("🚀 Starte GUI...")
         import gui_start  # Direkt importieren und ausführen
-        gui_start.main()  # Falls `main()` die Hauptfunktion ist
+        gui_start.main()
     except Exception as e:
         print(f"❌ Fehler beim Starten der GUI: {e}")
         sys.exit(1)
-
-def close_console():
-    """Schließt die Konsole nach dem Setup, wenn das Programm im Fenster-Modus läuft."""
-    if os.name == 'nt':  # Nur für Windows
-        ctypes.windll.user32.ShowWindow(ctypes.windll.kernel32.GetConsoleWindow(), 0)
 
 def main():
     """
@@ -159,7 +154,7 @@ def main():
     missing_with_version, missing_without_version = get_missing_packages()
 
     if torch_missing or missing_with_version or missing_without_version:
-        if prompt_install():  # 🔥 Erst hier wird der Benutzer gefragt
+        if prompt_install(): 
             if torch_missing:
                 install_torch()
             
