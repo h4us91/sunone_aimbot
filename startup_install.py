@@ -2,59 +2,82 @@ import sys, os, subprocess
 from pkg_resources import get_distribution, DistributionNotFound
 from PyQt6 import QtWidgets, QtCore
 
-# Konfiguration
+# Configuration
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PACKAGE_PATH = BASE_DIR
+
 TORCH_PACKAGES = ['torch', 'torchvision', 'torchaudio']
 TORCH_INDEX_URL = 'https://download.pytorch.org/whl/cu124'
-REQUIRED_PACKAGES = {}
-OPTIONAL_PACKAGES = [
+
+# TensorRT installation details (versioned)
+TENSORRT_PACKAGES = [
+    'tensorrt_cu12_libs==10.8.0.43',
+    'tensorrt_cu12_bindings==10.8.0.43',
+    'tensorrt==10.8.0.43'
+]
+TENSORRT_INDEX_URL = 'https://pypi.nvidia.com'
+
+# All packages are now considered optional
+REQUIRED_PACKAGES = [
     'ultralytics', 'bettercam', 'numpy', 'pywin32', 'screeninfo',
     'asyncio', 'onnxruntime', 'onnxruntime-gpu', 'pyserial', 'requests',
     'opencv-python', 'packaging', 'cuda_python', 'keyboard', 'mss',
-    'supervision', 'dill', 'wheel', 'tensorrt'
+    'supervision', 'dill'
 ]
 
 def is_package_installed(package_name, log, version=None):
+    """
+    Check if a package is installed. If version is provided, it checks for an exact match.
+    """
     try:
         dist = get_distribution(package_name)
-        log(f"✅ {package_name} gefunden (v{dist.version})")
-        return (version is None or dist.version == version)
+        log(f"✅ {package_name} found (v{dist.version})")
+        if version is None:
+            return True
+        return dist.version == version
     except DistributionNotFound:
-        log(f"❌ {package_name} NICHT gefunden")
+        log(f"❌ {package_name} NOT found")
         return False
 
 def get_missing_packages(log):
-    missing_with, missing_without = [], []
-    for pkg, ver in REQUIRED_PACKAGES.items():
-        if not is_package_installed(pkg, log, ver):
-            missing_with.append(f"{pkg}=={ver}")
-    for pkg in OPTIONAL_PACKAGES:
+    missing = []
+    for pkg in REQUIRED_PACKAGES:
         if not is_package_installed(pkg, log):
-            missing_without.append(pkg)
-    return missing_with, missing_without
+            missing.append(pkg)
+    return missing
 
 def install_torch(log):
-    log("🔍 Installiere Torch-Pakete...")
+    log("🔍 Installing Torch packages...")
     cmd = ["pip", "install", "--target", PACKAGE_PATH, "--no-warn-script-location",
            "--index-url", TORCH_INDEX_URL] + TORCH_PACKAGES
     try:
         subprocess.check_call(cmd)
-        log("✅ Torch-Pakete installiert.")
+        log("✅ Torch packages installed.")
     except subprocess.CalledProcessError as e:
-        log(f"❌ Fehler bei Torch-Installation: {e}")
+        log(f"❌ Error installing Torch packages: {e}")
+        sys.exit(1)
+
+def install_tensorrt(log):
+    log("🔍 Installing TensorRT packages...")
+    cmd = ["pip", "install", "--target", PACKAGE_PATH, "--no-warn-script-location",
+           "--index-url", TENSORRT_INDEX_URL] + TENSORRT_PACKAGES
+    try:
+        subprocess.check_call(cmd)
+        log("✅ TensorRT packages installed.")
+    except subprocess.CalledProcessError as e:
+        log(f"❌ Error installing TensorRT packages: {e}")
         sys.exit(1)
 
 def install_packages(pkgs, log):
     if not pkgs:
         return
-    log(f"🔍 Installiere: {' '.join(pkgs)}")
-    cmd = ["pip", "install", "--target", PACKAGE_PATH, "--no-warn-script-location", "--no-cache-dir", "--upgrade"] + pkgs
+    log(f"🔍 Installing: {' '.join(pkgs)}")
+    cmd = ["pip", "install", "--target", PACKAGE_PATH, "--no-warn-script-location", "--no-cache-dir"] + pkgs
     try:
         subprocess.check_call(cmd)
-        log("✅ Pakete installiert.")
+        log("✅ Packages installed.")
     except subprocess.CalledProcessError as e:
-        log(f"❌ Fehler bei Installation: {e}")
+        log(f"❌ Error installing packages: {e}")
         sys.exit(1)
 
 class InstallerWorker(QtCore.QThread):
@@ -62,24 +85,29 @@ class InstallerWorker(QtCore.QThread):
     finished = QtCore.pyqtSignal()
 
     def run(self):
-        # Installation durchführen ohne zusätzlichen Nachfrage-Dialog
-        self.log.emit("🔍 Starte Installation...")
-        # Installiere Torch falls nötig
-        if not all(is_package_installed(pkg, lambda m: self.log.emit(m)) for pkg in TORCH_PACKAGES):
-            install_torch(lambda m: self.log.emit(m))
-        # Installiere Pakete mit Versionen
-        missing_with, missing_without = get_missing_packages(lambda m: self.log.emit(m))
-        if missing_with:
-            install_packages(missing_with, lambda m: self.log.emit(m))
-        if missing_without:
-            install_packages(missing_without, lambda m: self.log.emit(m))
-        # Nochmals prüfen
-        self.log.emit("🔄 Überprüfe Installation...")
-        mw, mwo = get_missing_packages(lambda m: self.log.emit(m))
-        if mw or mwo:
-            self.log.emit("❌ Einige Pakete konnten nicht installiert werden.")
+        self.log.emit("🔍 Starting installation...")
+        # Install Torch packages if necessary
+        for pkg in TORCH_PACKAGES:
+            if not is_package_installed(pkg, lambda m: self.log.emit(m)):
+                install_torch(lambda m: self.log.emit(m))
+                break  # Install all at once, so break after calling install_torch
+
+        # Check and install TensorRT packages if needed
+        if not is_package_installed("tensorrt", lambda m: self.log.emit(m)):
+            install_tensorrt(lambda m: self.log.emit(m))
+
+        # Get missing optional packages
+        missing_optional = get_missing_packages(lambda m: self.log.emit(m))
+        if missing_optional:
+            install_packages(missing_optional, lambda m: self.log.emit(m))
+
+        # Final verification
+        self.log.emit("🔄 Verifying installation...")
+        missing_optional = get_missing_packages(lambda m: self.log.emit(m))
+        if missing_optional:
+            self.log.emit("❌ Some packages could not be installed: " + ", ".join(missing_optional))
         else:
-            self.log.emit("✅ Installation abgeschlossen.")
+            self.log.emit("✅ Installation complete.")
         self.finished.emit()
 
 class InstallerWindow(QtWidgets.QMainWindow):
@@ -90,34 +118,28 @@ class InstallerWindow(QtWidgets.QMainWindow):
         self.text = QtWidgets.QTextEdit(self)
         self.text.setReadOnly(True)
         self.setCentralWidget(self.text)
-
-        # Button für Installation (wird nur aktiviert, wenn Pakete fehlen)
-        self.install_button = QtWidgets.QPushButton("Installation starten", self)
+        self.install_button = QtWidgets.QPushButton("Start Installation", self)
         self.install_button.clicked.connect(self.start_installation)
         self.install_button.setEnabled(False)
-        toolbar = self.addToolBar("Aktionen")
+        toolbar = self.addToolBar("Actions")
         toolbar.addWidget(self.install_button)
-
-        # Initialer Check (nachdem GUI angezeigt wurde)
         QtCore.QTimer.singleShot(0, self.check_initial_packages)
 
     def append_log(self, message):
         self.text.append(message)
 
     def check_initial_packages(self):
-        self.append_log("🔍 Überprüfe Pakete...")
-        # Temporäre Logfunktion, die direkt ins Textfeld schreibt.
-        temp_log = lambda msg: self.append_log(msg)
-        missing_with, missing_without = get_missing_packages(temp_log)
-        if not missing_with and not missing_without:
-            self.append_log("✅ Alle Pakete sind vorhanden.")
+        self.append_log("🔍 Checking packages...")
+        missing_optional = get_missing_packages(lambda msg: self.append_log(msg))
+        if not missing_optional and is_package_installed("tensorrt", lambda m: self.append_log(m)):
+            self.append_log("✅ All packages are present.")
             self.launch_main_app()
         else:
-            self.append_log("❌ Fehlende Pakete erkannt:")
-            if missing_with:
-                self.append_log("Erforderlich: " + ", ".join(missing_with))
-            if missing_without:
-                self.append_log("Optional: " + ", ".join(missing_without))
+            self.append_log("❌ Missing packages detected:")
+            if missing_optional:
+                self.append_log("Optional: " + ", ".join(missing_optional))
+            if not is_package_installed("tensorrt", lambda m: self.append_log(m)):
+                self.append_log("TensorRT is missing.")
             self.install_button.setEnabled(True)
 
     def start_installation(self):
@@ -128,14 +150,13 @@ class InstallerWindow(QtWidgets.QMainWindow):
         self.worker.start()
 
     def post_installation(self):
-        self.append_log("🔄 Prüfe nach Installation...")
-        temp_log = lambda msg: self.append_log(msg)
-        missing_with, missing_without = get_missing_packages(temp_log)
-        if missing_with or missing_without:
-            self.append_log("❌ Einige Pakete fehlen weiterhin.")
+        self.append_log("🔄 Verifying installation post-installation...")
+        missing_optional = get_missing_packages(lambda msg: self.append_log(msg))
+        if missing_optional or not is_package_installed("tensorrt", lambda m: self.append_log(m)):
+            self.append_log("❌ Some packages are still missing.")
             self.install_button.setEnabled(True)
         else:
-            self.append_log("✅ Alle Pakete installiert.")
+            self.append_log("✅ All packages installed.")
             self.launch_main_app()
 
     def launch_main_app(self):
@@ -143,7 +164,6 @@ class InstallerWindow(QtWidgets.QMainWindow):
         main_gui = ConfigGUI()
         main_gui.show()
         self.close()
-        
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
