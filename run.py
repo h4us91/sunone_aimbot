@@ -14,7 +14,6 @@ from logic.shooting import shooting
 from logic.frame_parser import frameParser
 from logic.hotkeys_watcher import hotkeys_watcher
 from logic.checks import run_checks
-import supervision as sv
 import time
 
 # --- Log Queue Setup ---
@@ -86,39 +85,63 @@ class ThreadManager:
 
 thread_manager = ThreadManager()
 
+# Init ByteTrack
+if cfg.disable_tracker == False:
+    import supervision as sv
+    byte_tracker = sv.ByteTrack()
+    
 @torch.inference_mode()
-def perform_detection(model, image):
-    params = {
-        "source": image,
-        "imgsz": cfg.ai_model_image_size,
-        "stream": True,
-        "conf": cfg.AI_conf,
-        "iou": 0.5,
-        "device": cfg.AI_device,
-        "half": False if "cpu" in cfg.AI_device else True,
-        "max_det": 20,
-        "agnostic_nms": False,
-        "augment": False,
-        "vid_stride": False,
-        "visualize": False,
-        "verbose": False,
-        "show_boxes": False,
-        "show_labels": False,
-        "show_conf": False,
-        "save": False,
-        "show": False,
-    }
-
-    if not cfg.disable_tracker:
-        params["cfg"] = "logic/tracker.yaml"
-        byte_tracker = sv.ByteTrack()
-        results = model.predict(**params)
+def perform_detection(model, image, tracker=None):
+    if tracker is not None:
+        results = model.predict(
+            source=image,
+            cfg="logic/tracker.yaml",
+            imgsz=cfg.ai_model_image_size,
+            stream=True,
+            conf=cfg.AI_conf,
+            iou=0.5,
+            device=cfg.AI_device,
+            half=False if "cpu" in cfg.AI_device else True,
+            max_det=20,
+            agnostic_nms=False,
+            augment=False,
+            vid_stride=False,
+            visualize=False,
+            verbose=False,
+            show_boxes=False,
+            show_labels=False,
+            show_conf=False,
+            save=False,
+            show=False)
+        
         for result in results:
+            # Convert results to detections
             detections = sv.Detections.from_ultralytics(result)
-            return byte_tracker.update_with_detections(detections)
+            tracked_detections = byte_tracker.update_with_detections(detections)
+            return tracked_detections
     else:
-        params["cfg"] = "logic/game.yaml"
-        return next(model.predict(**params))
+        result = next(model.predict(
+            source=image,
+            cfg="logic/game.yaml",
+            imgsz=cfg.ai_model_image_size,
+            stream=True,
+            conf=cfg.AI_conf,
+            iou=0.5,
+            device=cfg.AI_device,
+            half=False if "cpu" in cfg.AI_device else True,
+            max_det=20,
+            agnostic_nms=False,
+            augment=False,
+            vid_stride=False,
+            visualize=False,
+            verbose=False,
+            show_boxes=False,
+            show_labels=False,
+            show_conf=False,
+            save=False,
+            show=False))
+        
+        return result
     
 def init():
     running.set()
@@ -147,7 +170,7 @@ def init():
                 if cfg.show_window or cfg.show_overlay:
                     visuals.queue.put(image)
 
-                result = perform_detection(model, image)
+                result = perform_detection(model, image, byte_tracker)
                 if result is not None and cfg.aim_active and hotkeys_watcher.app_pause == 0:
                     frameParser.parse(result)
                  

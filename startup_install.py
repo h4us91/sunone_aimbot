@@ -1,177 +1,152 @@
-import subprocess
-import sys
-import os
-import ctypes
+import sys, os, subprocess
 from pkg_resources import get_distribution, DistributionNotFound
-if os.name == "nt":
-    import codecs
-    sys.stdout = codecs.getwriter("utf-8")(sys.stdout.buffer, errors="replace")
-    sys.stderr = codecs.getwriter("utf-8")(sys.stderr.buffer, errors="replace")
-# Basisverzeichnis und Package-Ordner definieren
+from PyQt6 import QtWidgets, QtCore
+
+# Konfiguration
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PACKAGE_PATH = BASE_DIR
-PYTHON_PIP = sys.executable
-
-
 TORCH_PACKAGES = ['torch', 'torchvision', 'torchaudio']
 TORCH_INDEX_URL = 'https://download.pytorch.org/whl/cu124'
-
-
 REQUIRED_PACKAGES = {}
-
-
 OPTIONAL_PACKAGES = [
-    'ultralytics',
-    'bettercam',
-    'numpy',
-    'pywin32',
-    'screeninfo',
-    'asyncio',
-    'onnxruntime',
-    'onnxruntime-gpu',
-    'pyserial',
-    'requests',
-    'opencv-python',
-    'packaging',
-    'cuda_python',
-    'keyboard',
-    'mss',
-    'supervision',
-    'dill'
+    'ultralytics', 'bettercam', 'numpy', 'pywin32', 'screeninfo',
+    'asyncio', 'onnxruntime', 'onnxruntime-gpu', 'pyserial', 'requests',
+    'opencv-python', 'packaging', 'cuda_python', 'keyboard', 'mss',
+    'supervision', 'dill', 'wheel', 'tensorrt'
 ]
 
-def is_package_installed(package_name, version=None):
-    """
-    Prüft, ob ein Paket installiert ist. Falls Version angegeben ist, wird sie überprüft.
-    """
+def is_package_installed(package_name, log, version=None):
     try:
         dist = get_distribution(package_name)
-        print(f"✅ Paket gefunden: {package_name} (Installiert: {dist.version}, Erwartet: {version})")
-
-        if version is None or dist.version == version:
-            return True
-        else:
-            print(f"⚠️ Paket `{package_name}` hat falsche Version: {dist.version} (Erwartet: {version})")
-            return False
-
+        log(f"✅ {package_name} gefunden (v{dist.version})")
+        return (version is None or dist.version == version)
     except DistributionNotFound:
-        print(f"❌ Paket NICHT gefunden: {package_name}")
+        log(f"❌ {package_name} NICHT gefunden")
         return False
 
-def install_torch():
-    """
-    Installiert Torch-Pakete mit der speziellen URL.
-    """
-    print("🔍 Installiere Torch-Pakete...")
-    cmd = [
-        "pip", "install", "--target", PACKAGE_PATH,
-        "--no-warn-script-location",
-        "--index-url", TORCH_INDEX_URL
-    ] + TORCH_PACKAGES
+def get_missing_packages(log):
+    missing_with, missing_without = [], []
+    for pkg, ver in REQUIRED_PACKAGES.items():
+        if not is_package_installed(pkg, log, ver):
+            missing_with.append(f"{pkg}=={ver}")
+    for pkg in OPTIONAL_PACKAGES:
+        if not is_package_installed(pkg, log):
+            missing_without.append(pkg)
+    return missing_with, missing_without
 
+def install_torch(log):
+    log("🔍 Installiere Torch-Pakete...")
+    cmd = ["pip", "install", "--target", PACKAGE_PATH, "--no-warn-script-location",
+           "--index-url", TORCH_INDEX_URL] + TORCH_PACKAGES
     try:
         subprocess.check_call(cmd)
-        print("✅ Torch-Pakete erfolgreich installiert.")
+        log("✅ Torch-Pakete installiert.")
     except subprocess.CalledProcessError as e:
-        print(f"❌ Fehler bei der Torch-Installation: {e}")
+        log(f"❌ Fehler bei Torch-Installation: {e}")
         sys.exit(1)
 
-def get_missing_packages():
-    """
-    Sammelt alle Pakete, die fehlen oder eine falsche Version haben.
-    """
-    missing_with_version = []
-    missing_without_version = []
-
-    # Überprüfe Pakete mit fester Version
-    for package, version in REQUIRED_PACKAGES.items():
-        if not is_package_installed(package, version):
-            missing_with_version.append(f"{package}=={version}")
-
-    # Überprüfe Pakete ohne feste Version
-    for package in OPTIONAL_PACKAGES:
-        if not is_package_installed(package):
-            missing_without_version.append(package)
-
-    return missing_with_version, missing_without_version
-
-def install_packages(packages):
-    """
-    Installiert Pakete mit `pip` in den `PACKAGE_PATH`.
-    """
-    if not packages:
+def install_packages(pkgs, log):
+    if not pkgs:
         return
-
-    print(f"🔍 Installiere folgende Pakete: {' '.join(packages)}")
-    cmd = [
-        "pip", "install",
-        "--target", PACKAGE_PATH, "--no-warn-script-location", "--no-cache-dir"
-    ] + packages
-
+    log(f"🔍 Installiere: {' '.join(pkgs)}")
+    cmd = ["pip", "install", "--target", PACKAGE_PATH, "--no-warn-script-location", "--no-cache-dir", "--upgrade"] + pkgs
     try:
         subprocess.check_call(cmd)
-        print("✅ Paketinstallation erfolgreich.")
+        log("✅ Pakete installiert.")
     except subprocess.CalledProcessError as e:
-        print(f"❌ Fehler bei der Installation: {e}")
+        log(f"❌ Fehler bei Installation: {e}")
         sys.exit(1)
 
-def prompt_install():
-    """
-    Fragt den Nutzer, ob fehlende Pakete installiert werden sollen.
-    """
-    while True:
-        choice = input("Fehlende Abhängigkeiten erkannt. Installieren? (Y/N): ").strip().lower()
-        if choice == 'y':
-            return True
-        elif choice == 'n':
-            print("Beende das Programm.")
-            sys.exit(0)
+class InstallerWorker(QtCore.QThread):
+    log = QtCore.pyqtSignal(str)
+    finished = QtCore.pyqtSignal()
+
+    def run(self):
+        # Installation durchführen ohne zusätzlichen Nachfrage-Dialog
+        self.log.emit("🔍 Starte Installation...")
+        # Installiere Torch falls nötig
+        if not all(is_package_installed(pkg, lambda m: self.log.emit(m)) for pkg in TORCH_PACKAGES):
+            install_torch(lambda m: self.log.emit(m))
+        # Installiere Pakete mit Versionen
+        missing_with, missing_without = get_missing_packages(lambda m: self.log.emit(m))
+        if missing_with:
+            install_packages(missing_with, lambda m: self.log.emit(m))
+        if missing_without:
+            install_packages(missing_without, lambda m: self.log.emit(m))
+        # Nochmals prüfen
+        self.log.emit("🔄 Überprüfe Installation...")
+        mw, mwo = get_missing_packages(lambda m: self.log.emit(m))
+        if mw or mwo:
+            self.log.emit("❌ Einige Pakete konnten nicht installiert werden.")
         else:
-            print("Bitte gib 'Y' für Ja oder 'N' für Nein ein.")
+            self.log.emit("✅ Installation abgeschlossen.")
+        self.finished.emit()
 
-def launch_gui():
-    """
-    Startet die GUI-Anwendung mit `gui_start.py`, falls es eingebettet ist.
-    """
-    try:
-        print("🚀 Starte GUI...")
-        import gui_start  # Direkt importieren und ausführen
-        gui_start.main()
-    except Exception as e:
-        print(f"❌ Fehler beim Starten der GUI: {e}")
-        sys.exit(1)
+class InstallerWindow(QtWidgets.QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Installer")
+        self.resize(500, 400)
+        self.text = QtWidgets.QTextEdit(self)
+        self.text.setReadOnly(True)
+        self.setCentralWidget(self.text)
 
-def main():
-    """
-    Hauptfunktion zur Überprüfung und Installation der Abhängigkeiten.
-    """
-    print("\n🔍 Starte Paketprüfung...")
+        # Button für Installation (wird nur aktiviert, wenn Pakete fehlen)
+        self.install_button = QtWidgets.QPushButton("Installation starten", self)
+        self.install_button.clicked.connect(self.start_installation)
+        self.install_button.setEnabled(False)
+        toolbar = self.addToolBar("Aktionen")
+        toolbar.addWidget(self.install_button)
 
-    # Überprüfe, ob Torch fehlt
-    torch_missing = not all(is_package_installed(pkg) for pkg in TORCH_PACKAGES)
+        # Initialer Check (nachdem GUI angezeigt wurde)
+        QtCore.QTimer.singleShot(0, self.check_initial_packages)
 
-    # Überprüfe fehlende optionale Pakete
-    missing_with_version, missing_without_version = get_missing_packages()
+    def append_log(self, message):
+        self.text.append(message)
 
-    if torch_missing or missing_with_version or missing_without_version:
-        if prompt_install(): 
-            if torch_missing:
-                install_torch()
-            
-            if missing_with_version:
-                install_packages(missing_with_version)
+    def check_initial_packages(self):
+        self.append_log("🔍 Überprüfe Pakete...")
+        # Temporäre Logfunktion, die direkt ins Textfeld schreibt.
+        temp_log = lambda msg: self.append_log(msg)
+        missing_with, missing_without = get_missing_packages(temp_log)
+        if not missing_with and not missing_without:
+            self.append_log("✅ Alle Pakete sind vorhanden.")
+            self.launch_main_app()
+        else:
+            self.append_log("❌ Fehlende Pakete erkannt:")
+            if missing_with:
+                self.append_log("Erforderlich: " + ", ".join(missing_with))
+            if missing_without:
+                self.append_log("Optional: " + ", ".join(missing_without))
+            self.install_button.setEnabled(True)
 
-            if missing_without_version:
-                install_packages(missing_without_version)
+    def start_installation(self):
+        self.install_button.setEnabled(False)
+        self.worker = InstallerWorker()
+        self.worker.log.connect(self.append_log)
+        self.worker.finished.connect(self.post_installation)
+        self.worker.start()
 
-            print("🔄 Überprüfe erneut nach Installation...")
-            missing_after_with, missing_after_without = get_missing_packages()
-            if missing_after_with or missing_after_without:
-                print("❌ Einige Pakete konnten nicht installiert werden.")
-                sys.exit(1)
+    def post_installation(self):
+        self.append_log("🔄 Prüfe nach Installation...")
+        temp_log = lambda msg: self.append_log(msg)
+        missing_with, missing_without = get_missing_packages(temp_log)
+        if missing_with or missing_without:
+            self.append_log("❌ Einige Pakete fehlen weiterhin.")
+            self.install_button.setEnabled(True)
+        else:
+            self.append_log("✅ Alle Pakete installiert.")
+            self.launch_main_app()
 
-    print("✅ Alle Pakete sind bereits installiert.")
-    launch_gui()
+    def launch_main_app(self):
+        from gui_start import ConfigGUI
+        main_gui = ConfigGUI()
+        main_gui.show()
+        self.close()
+        
 
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    app = QtWidgets.QApplication(sys.argv)
+    win = InstallerWindow()
+    win.show()
+    sys.exit(app.exec())

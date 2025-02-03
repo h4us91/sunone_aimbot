@@ -28,11 +28,9 @@ class MacroThread(threading.Thread):
 
     def run(self):
         """Überprüft dauerhaft die `switch_key` und `fire_key`."""
-        print("[INFO] Makro-Thread gestartet.")
         while self.running:
             self.manager.check_keys()
             time.sleep(0.1)  # Reduziert CPU-Last
-        print("[INFO] Makro-Thread gestoppt.")
 
     def stop(self):
         """Beendet den Makro-Thread sauber."""

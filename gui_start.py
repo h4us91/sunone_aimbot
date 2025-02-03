@@ -46,7 +46,11 @@ class ConfigGUI(QWidget):
         self.load_config()
         self.mouse = None
         self.run_module = None
-        icon_path = os.path.join(os.path.dirname(__file__), "assets", "inosuke.ico")  
+        if getattr(sys, 'frozen', False):
+            base_path = sys._MEIPASS
+        else:
+            base_path = os.path.dirname(__file__)
+        icon_path = os.path.join(base_path, "assets", "inosuke.ico")
         self.setWindowIcon(QIcon(icon_path))
 
         # Kommunikationsobjekt für Signal-Slot-Mechanismus
@@ -288,9 +292,8 @@ class ConfigGUI(QWidget):
             if current_macro != "None":
                 self.log_console.append(f"WARNING: Active macro '{current_macro}'")
             self.save_config()
-            self.log_console.append("🚀 Starte...")
+            self.log_console.append("🚀 Starting...")
             
-            # Always reload the run module
             import importlib
             if self.run_module:
                 importlib.reload(self.run_module)
@@ -305,16 +308,12 @@ class ConfigGUI(QWidget):
         else:
             if self.run_module:
                 self.run_module.stop()
-                self.log_console.append("🛑 Stop requested!")
                 if self.process.is_alive():
                     self.process.join(timeout=2.0)
+                    self.log_console.append("🛑 Successfully stopped!")
             self.process = None
             self.start_button.setText("Start")
 
-
-
-
-                    
     def fetch_logs(self):
         if self.run_module is None:
             return
@@ -323,8 +322,6 @@ class ConfigGUI(QWidget):
             self.log_console.append(line.rstrip())
         if self.process and self.process.is_alive():
             QTimer.singleShot(100, self.fetch_logs)
-
-
 
     def handle_stdout(self):
         text = self.process.readAllStandardOutput().data().decode()

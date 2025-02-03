@@ -45,12 +45,12 @@ class KernelDriver:
         driver_path = os.path.join(temp_dir, "driver.sys")
         
         if getattr(sys, 'frozen', False):
-            base_dir = os.path.dirname(sys.executable)
+            base_dir = sys._MEIPASS
+            mapper_path = os.path.join(base_dir, "logic", "driver", "mapper.exe")
+            print(mapper_path)
         else:
             base_dir = os.path.dirname(os.path.abspath(__file__))
-        
-
-        mapper_path = os.path.join(base_dir,"mapper.exe")
+            mapper_path = os.path.join(base_dir)
 
         try:
             # Driver aus Base64 decodieren und in temp speichern

@@ -1,6 +1,7 @@
 import torch
 import os
 from logic.config_watcher import cfg
+import sys
 
 def convert_onnx_to_fp16():
     import onnx
@@ -38,9 +39,9 @@ def check_model_fp16():
     return False
 
 def Warnings():
-        print("--------------------------------------------------------------------------------------") 
+        print("------------------------------------------------------------------------------------") 
         print("This is an external program, making bans less likely compared to internal cheats. For the safest experience, Arduino-based bypasses are recommended for anti-cheats like Vanguard and FACEIT. `win32api` can work for Fortnite and some EAC/BE-protected games but may be detected. Kernel bypass uses an unsigned IOCTL driver with kdmapper—only use it for older games with kernel-level anti-cheat. Use all methods at your own risk!")
-        print("--------------------------------------------------------------------------------------") 
+        print("------------------------------------------------------------------------------------") 
         if ".pt" in cfg.AI_model_name:
             print("WARNING: Export the model to `.engine` for better performance!\nHOW TO EXPORT TO ENGINE: 'https://github.com/SunOner/sunone_aimbot_docs/blob/main/ai_models/ai_models.md'")
         if cfg.show_window:
@@ -71,7 +72,7 @@ def Warnings():
         selected_methods = sum([cfg.arduino_move, cfg.mouse_ghub, cfg.mouse_rzr, cfg.kernel_bypass])
         if selected_methods > 1:
             print("WARNING: Multiple mouse input methods are enabled. This can cause conflicts and unexpected behavior. Please check the mouse settings tab and select only one preferred input method for optimal performance.")
-            quit()
+            sys.exit(1)
             
         
 def run_checks():
@@ -81,19 +82,19 @@ def run_checks():
             "Run command 'pip uninstall torch torchvision torchaudio'\n"
             "Next go to 'https://pytorch.org/get-started/locally/' and install torch with CUDA support.\n"
             "Don't forget your CUDA version (Minimum version is 12.1, max version is 12.4).")
-        quit()
+        sys.exit(1)
         
     if + cfg.mss_capture + cfg.Bettercam_capture + cfg.Obs_capture < 1:
         print("Use at least one image capture method.\nSet the value to `True` in the `bettercam_capture` option or in the `obs_capture` option or in the `mss_capture` option.")
-        quit()
+        sys.exit(1)
         
     if  cfg.mss_capture + cfg.Bettercam_capture + cfg.Obs_capture > 1:
         print("Only one capture method is possible.\nSet the value to `True` in the `bettercam_capture` option or in the `obs_capture` option or in the `mss_capture` option.")
-        quit()
+        sys.exit(1)
 
     if not os.path.exists(f"models/{cfg.AI_model_name}"):
         print(f"The AI model {cfg.AI_model_name} has not been found! Check the correctness of the model name in the AI_model_name option.")
-        quit()
+        sys.exit(1)
     
     if cfg.AI_model_name.endswith(".onnx"):
         fp16 = check_model_fp16()
@@ -102,8 +103,8 @@ def run_checks():
             if not os.path.exists(f"models/{check_converted_model}"):
                 print(f"The current AI format of the '{cfg.AI_model_name}' model is fp32. Converting model to fp16...")
                 convert_onnx_to_fp16()
-                quit()
+                sys.exit(1)
             else:
                 print(f"Please, use converted model - '{check_converted_model}'.\nChange in config.ini 'AI_model_name = {check_converted_model}'")
-                quit()
+                sys.exit(1)
     Warnings()
