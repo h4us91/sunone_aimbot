@@ -170,7 +170,7 @@ class MacroManager:
 
         if self._is_key_pressed(self.fire_key):
             self._execute_macro()
-            time.sleep(0.3)
+
 
     def _is_key_pressed(self, key):
         key_code = Buttons.KEY_CODES.get(key.strip())
@@ -189,4 +189,3 @@ class MacroManager:
         macro.execute(macro.syntax_key_down)
         macro.execute(macro.syntax_key_up)
 
-macro = MacroThread()   

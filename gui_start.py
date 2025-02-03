@@ -10,6 +10,7 @@ from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import QTimer, QProcess, pyqtSignal, QObject
 from pathlib import Path
 from logic.macro import MacroLoader
+from logic.buttons import Buttons
 import time
 
 def setup_lib_path():
@@ -121,44 +122,58 @@ class ConfigGUI(QWidget):
                 if section not in self.config.sections():
                     continue  # Überspringe, wenn die Sektion nicht existiert
 
+                
                 if section == "Macro":
                     macro_group = QGroupBox(section)
                     macro_layout = QFormLayout()
                     macro_loader = MacroLoader()
-                    macros = macro_loader.get_all_macros()  # Holt alle verfügbaren Makros als Liste
+                    macros = macro_loader.get_all_macros()
 
                     # Primary Macro Dropdown
                     primary_macro_box = QComboBox()
                     primary_macro_box.addItems(macros)
                     primary_macro_box.setCurrentText(
-                        self.config["Macro"].get("primary_macro", "None") if "Macro" in self.config else "None"
+                        self.config["Macro"].get("primary_macro", "None")
                     )
-                    primary_macro_box.currentIndexChanged.connect(
-                        lambda: self.config.set("Macro", "primary_macro", primary_macro_box.currentText())
+                    primary_macro_box.currentTextChanged.connect(
+                        lambda val: self.config.set("Macro", "primary_macro", val)
                     )
 
                     # Secondary Macro Dropdown
                     secondary_macro_box = QComboBox()
                     secondary_macro_box.addItems(macros)
                     secondary_macro_box.setCurrentText(
-                        self.config["Macro"].get("secondary_macro", "None") if "Macro" in self.config else "None"
+                        self.config["Macro"].get("secondary_macro", "None")
                     )
-                    secondary_macro_box.currentIndexChanged.connect(
-                        lambda: self.config.set("Macro", "secondary_macro", secondary_macro_box.currentText())
+                    secondary_macro_box.currentTextChanged.connect(
+                        lambda val: self.config.set("Macro", "secondary_macro", val)
                     )
 
-                    # Switch Key Input
-                    switch_key_edit = QLineEdit(self.config["Macro"].get("switch_key", "Tab"))
-                    switch_key_edit.textChanged.connect(lambda val: self.config.set("Macro", "switch_key", val))
+                    # Erstelle Dropdowns für Switch Key und Fire Key
+                    available_keys = Buttons.KEY_CODES.keys()
+                    
+                    switch_key_combo = QComboBox()
+                    switch_key_combo.addItems(available_keys)
+                    switch_key_combo.setCurrentText(
+                        self.config["Macro"].get("switch_key", "Tab")
+                    )
+                    switch_key_combo.currentTextChanged.connect(
+                        lambda val: self.config.set("Macro", "switch_key", val)
+                    )
 
-                    # Fire Key Input
-                    fire_key_edit = QLineEdit(self.config["Macro"].get("fire_key", "MiddleMouseButton"))
-                    fire_key_edit.textChanged.connect(lambda val: self.config.set("Macro", "fire_key", val))
+                    fire_key_combo = QComboBox()
+                    fire_key_combo.addItems(available_keys)
+                    fire_key_combo.setCurrentText(
+                        self.config["Macro"].get("fire_key", "MiddleMouseButton")
+                    )
+                    fire_key_combo.currentTextChanged.connect(
+                        lambda val: self.config.set("Macro", "fire_key", val)
+                    )
 
                     macro_layout.addRow("Primary Macro:", primary_macro_box)
                     macro_layout.addRow("Secondary Macro:", secondary_macro_box)
-                    macro_layout.addRow("Switch Key:", switch_key_edit)
-                    macro_layout.addRow("Fire Key:", fire_key_edit)
+                    macro_layout.addRow("Switch Key:", switch_key_combo)
+                    macro_layout.addRow("Fire Key:", fire_key_combo)
 
                     macro_group.setLayout(macro_layout)
                     tab_layout.addWidget(macro_group)

@@ -7,7 +7,7 @@ from pathlib import Path
 from ultralytics import YOLO
 from logic.config_watcher import cfg
 from logic.capture import capture
-from logic.macro import macro
+from logic.macro import MacroThread
 from logic.overlay import overlay
 from logic.visual import visuals
 from logic.shooting import shooting
@@ -50,15 +50,13 @@ class ThreadManager:
         shooting.__init__()
         visuals.__init__()
         hotkeys_watcher.__init__()
-        if cfg.primary_macro or cfg.secondary_macro:
-            macro.__init__()
         if cfg.show_overlay:
             overlay.__init__()
             
         # Create thread list
         self.threads = [capture, shooting, visuals, hotkeys_watcher]
         if cfg.primary_macro or cfg.secondary_macro:
-            self.threads.append(macro)
+            self.threads.append(MacroThread())
         if cfg.show_overlay:
             self.threads.append(overlay)
     
@@ -73,12 +71,12 @@ class ThreadManager:
             # Erst alle Threads stoppen
             for thread in self.threads:
                 if thread.is_alive():
-                    thread.stop()  # Setzt nur das Stop-Signal
+                    thread.stop() 
             
             # Dann auf alle Threads warten
             for thread in self.threads:
                 if thread.is_alive():
-                    thread.join(timeout=2.0)  # Join von außen aufrufen
+                    thread.join(timeout=2.0)  
                     
             self.threads.clear()
 
@@ -86,56 +84,38 @@ thread_manager = ThreadManager()
 
 @torch.inference_mode()
 def perform_detection(model, image):
-    if not cfg.disable_tracker: 
+    params = {
+        "source": image,
+        "imgsz": cfg.ai_model_image_size,
+        "stream": True,
+        "conf": cfg.AI_conf,
+        "iou": 0.5,
+        "device": cfg.AI_device,
+        "half": False if "cpu" in cfg.AI_device else True,
+        "max_det": 20,
+        "agnostic_nms": False,
+        "augment": False,
+        "vid_stride": False,
+        "visualize": False,
+        "verbose": False,
+        "show_boxes": False,
+        "show_labels": False,
+        "show_conf": False,
+        "save": False,
+        "show": False,
+    }
+
+    if not cfg.disable_tracker:
+        params["cfg"] = "logic/tracker.yaml"
         byte_tracker = sv.ByteTrack()
-        results = model.predict(
-            source=image,
-            cfg="logic/tracker.yaml",
-            imgsz=cfg.ai_model_image_size,
-            stream=True,
-            conf=cfg.AI_conf,
-            iou=0.5,
-            device=cfg.AI_device,
-            half=False if "cpu" in cfg.AI_device else True, 
-            max_det=20,
-            agnostic_nms=False,
-            augment=False,
-            vid_stride=False,
-            visualize=False,
-            verbose=False,
-            show_boxes=False,
-            show_labels=False,
-            show_conf=False,
-            save=False,
-            show=False)
+        results = model.predict(**params)
         for result in results:
             detections = sv.Detections.from_ultralytics(result)
-            tracked_detections = byte_tracker.update_with_detections(detections)
-            return tracked_detections
+            return byte_tracker.update_with_detections(detections)
     else:
-        result = next(model.predict(
-            source=image,
-            cfg="logic/game.yaml",
-            imgsz=cfg.ai_model_image_size,
-            stream=True,
-            conf=cfg.AI_conf,
-            iou=0.5,
-            device=cfg.AI_device,
-            half=False if "cpu" in cfg.AI_device else True,
-            max_det=20,
-            agnostic_nms=False,
-            augment=False,
-            vid_stride=False,
-            visualize=False,
-            verbose=False,
-            show_boxes=False,
-            show_labels=False,
-            show_conf=False,
-            save=False,
-            show=False
-        ))
-        return result
-
+        params["cfg"] = "logic/game.yaml"
+        return next(model.predict(**params))
+    
 def init():
     running.set()
     run_checks()
