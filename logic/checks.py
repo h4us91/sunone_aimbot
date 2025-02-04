@@ -77,11 +77,7 @@ def Warnings():
         
 def run_checks():
     if torch.cuda.is_available() is False:
-        print("You need to install a version of pytorch that supports CUDA.\n"
-            "First uninstall all torch packages.\n"
-            "Run command 'pip uninstall torch torchvision torchaudio'\n"
-            "Next go to 'https://pytorch.org/get-started/locally/' and install torch with CUDA support.\n"
-            "Don't forget your CUDA version (Minimum version is 12.1, max version is 12.4).")
+        print("No CUDA-compatible GPU detected. If you're using a laptop, ensure your dedicated GPU is active and not running on integrated graphics.")
         sys.exit(1)
         
     if + cfg.mss_capture + cfg.Bettercam_capture + cfg.Obs_capture < 1:

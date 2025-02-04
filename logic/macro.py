@@ -5,7 +5,6 @@ import threading
 import win32api
 import win32con
 from logic.config_watcher import cfg
-from logic.thread_stop import stop_flag
 from logic.driver.driver_logic import KernelDriver
 from logic.buttons import Buttons
 from pathlib import Path

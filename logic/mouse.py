@@ -15,7 +15,6 @@ from logic.visual import visuals
 from logic.shooting import shooting
 from logic.buttons import Buttons
 import threading
-from logic.thread_stop import stop_flag
 
 
 class Mouse_net(nn.Module):

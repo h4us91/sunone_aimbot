@@ -14,7 +14,7 @@ from logic.shooting import shooting
 from logic.frame_parser import frameParser
 from logic.hotkeys_watcher import hotkeys_watcher
 from logic.checks import run_checks
-import time
+
 
 # --- Log Queue Setup ---
 log_queue = queue.Queue()
