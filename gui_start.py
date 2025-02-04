@@ -11,7 +11,6 @@ from PyQt6.QtCore import QTimer, QProcess, pyqtSignal, QObject
 from pathlib import Path
 from logic.macro import MacroLoader
 from logic.buttons import Buttons
-import time
 
 def setup_lib_path():
     global CONFIG_PATH, BASE_DIR
@@ -34,7 +33,7 @@ if getattr(sys, 'frozen', False):
     if portable_python_path.exists():
         venv_python = str(portable_python_path)
 
-class Communicate(QObject):
+class Communicate(QObject): 
     toggle_visibility = pyqtSignal()
 
 class ConfigGUI(QWidget):
@@ -116,18 +115,63 @@ class ConfigGUI(QWidget):
             "Overlay | Debug Window": ["overlay", "Debug window"],
         }
         
-        grouped_sections = set()
-            
+        # Halte die bereits verarbeiteten Sektionen nach
+        processed_sections = set()
+        
         for tab_name, sections in grouped_tabs.items():
             tab = QWidget()
             tab_layout = QVBoxLayout()
-
+            
             for section in sections:
                 if section not in self.config.sections():
-                    continue  # Überspringe, wenn die Sektion nicht existiert
+                    continue
+                    
+                if section in processed_sections:
+                    continue
+                    
+                if section == "Aim":
+                    # Spezielle Behandlung für Aim-Sektion
+                    group_box = QGroupBox(section)
+                    form_layout = QFormLayout()
 
-                
-                if section == "Macro":
+                    # Aim Active checkbox
+                    aim_active_checkbox = QCheckBox()
+                    aim_active = self.config["Aim"].getboolean("aim_active")
+                    aim_active_checkbox.setChecked(aim_active)
+                    aim_active_checkbox.stateChanged.connect(
+                        lambda state: self.config.set("Aim", "aim_active", "true" if state else "false")
+                    )
+                    form_layout.addRow("Aim Active:", aim_active_checkbox)
+
+                    # Aim Profile dropdown
+                    aim_profile_box = QComboBox()
+                    profiles = list(self.config["AimProfiles"].keys())
+                    formatted_profiles = [p.capitalize() for p in profiles]
+                    aim_profile_box.addItems(formatted_profiles)
+                    current_profile = self.config["Aim"].get("aim_profile", profiles[0]).capitalize()
+                    if current_profile in formatted_profiles:
+                        aim_profile_box.setCurrentText(current_profile)
+                    else:
+                        aim_profile_box.setCurrentIndex(0)
+                    aim_profile_box.currentTextChanged.connect(
+                        lambda val: self.config.set("Aim", "aim_profile", val.lower())
+                    )
+                    form_layout.addRow("Aim Profile:", aim_profile_box)
+
+                    # Restliche Aim-Felder
+                    for key, value in self.config["Aim"].items():
+                        if key.lower() in ["aim_active", "aim_profile"]:
+                            continue
+                        widget = self.create_widget("Aim", key, value)
+                        if widget:
+                            form_layout.addRow(QLabel(key.replace('_', ' ').capitalize()), widget)
+
+                    group_box.setLayout(form_layout)
+                    tab_layout.addWidget(group_box)
+                    processed_sections.add("Aim")
+
+                elif section == "Macro":
+                    # Spezielle Behandlung für Macro-Sektion
                     macro_group = QGroupBox(section)
                     macro_layout = QFormLayout()
                     macro_loader = MacroLoader()
@@ -153,7 +197,7 @@ class ConfigGUI(QWidget):
                         lambda val: self.config.set("Macro", "secondary_macro", val)
                     )
 
-                    # Erstelle Dropdowns für Switch Key und Fire Key
+                    # Switch Key und Fire Key Dropdowns
                     available_keys = Buttons.KEY_CODES.keys()
                     
                     switch_key_combo = QComboBox()
@@ -181,6 +225,7 @@ class ConfigGUI(QWidget):
 
                     macro_group.setLayout(macro_layout)
                     tab_layout.addWidget(macro_group)
+                    processed_sections.add("Macro")
                     
                 else:
                     # Allgemeine Sektionen
@@ -194,18 +239,15 @@ class ConfigGUI(QWidget):
 
                     group_box.setLayout(form_layout)
                     tab_layout.addWidget(group_box)
-
-                grouped_sections.add(section)    
+                    processed_sections.add(section)
 
             tab.setLayout(tab_layout)
             self.tabs.addTab(tab, tab_name)
-            
-        for section in self.config.sections():
-            if section in grouped_sections:
-                continue  # Bereits gruppiert
 
-            if section == "Macro":
-                continue  # Macro ist bereits gruppiert
+        # Verarbeite übrige, nicht gruppierte Sektionen
+        for section in self.config.sections():
+            if section in processed_sections or section == "AimProfiles":
+                continue
 
             tab = QWidget()
             form_layout = QFormLayout()
@@ -215,10 +257,8 @@ class ConfigGUI(QWidget):
                 if widget:
                     form_layout.addRow(QLabel(key.replace('_', ' ').capitalize()), widget)
 
-            tab_layout.addStretch()
             tab.setLayout(form_layout)
             self.tabs.addTab(tab, section)
-
                     
     def create_widget(self, section, key, value):
         """Hilfsfunktion zur Erstellung von Widgets basierend auf dem Werttyp."""

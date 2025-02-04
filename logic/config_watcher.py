@@ -25,13 +25,17 @@ class Config():
             print(f"❌ Config file not found at: {self.config_path}")
             quit()
         
-        aim_profiles = {
-            "head": 0.30,        # Center of the head
-            "neck": 0.20,        # Neck area
-            "chest": 0.10,       # Chest area
-            "stomach": 0.00      # Stomach area
-        }
-        
+    # AimProfiles aus der Config.ini lesen
+        if "AimProfiles" in self.config:
+            self.aim_profiles = { key.lower(): float(value) for key, value in self.config["AimProfiles"].items() }
+        else:
+            # Falls der Abschnitt fehlt, kannst du Standardwerte setzen
+            self.aim_profiles = {
+                "head": 0.30,
+                "neck": 0.20,
+                "chest": 0.10,
+                "stomach": 0.00
+            }
                     
         # Detection window
         self.config_Detection_window = self.config["Detection window"]
@@ -55,12 +59,11 @@ class Config():
         self.Obs_capture_fps = int(self.config_Obs_capture["Obs_capture_fps"])
         # Aim
         self.config_Aim = self.config["Aim"]
-
-        profile_name = self.config_Aim["body_y_offset"].lower()
-        if profile_name not in aim_profiles:
-            print(f"[WARNING] Invalid body_y_offset value '{profile_name}', using default 'neck'.")
+        profile_name = self.config_Aim["aim_profile"].lower()
+        if profile_name not in self.aim_profiles:
+            print(f"[WARNING] Invalid aim_profile value '{profile_name}', using default 'neck'.")
             profile_name = "neck"
-        self.body_y_offset = aim_profiles[profile_name]
+        self.aim_profile = self.aim_profiles[profile_name]
         self.aim_active = self.config_Aim.getboolean("aim_active")
         self.hideout_targets = self.config_Aim.getboolean("hideout_targets")
         self.disable_headshot = self.config_Aim.getboolean("disable_headshot")

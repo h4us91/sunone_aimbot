@@ -12,7 +12,7 @@ import cv2
 class Target:
     def __init__(self, x, y, w, h, cls):
         self.x = x
-        self.y = y if cls == 7 else (y - cfg.body_y_offset * h)
+        self.y = y if cls == 7 else (y - cfg.aim_profile * h)
         self.w = w
         self.h = h
         self.cls = cls

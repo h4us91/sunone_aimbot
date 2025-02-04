@@ -534,7 +534,7 @@ elif st.session_state.current_tab == "CONFIG":
     
     # Aim
     st.subheader("Aim", divider=True)
-    body_y_offset = st.slider(label="Body Y offset", min_value=-0.99, max_value=0.99, value=config.getfloat('Aim', 'body_y_offset'), key="config_body_y_offset")
+    aim_profile = st.slider(label="Body Y offset", min_value=-0.99, max_value=0.99, value=config.getfloat('Aim', 'aim_profile'), key="config_aim_profile")
     hideout_targets = st.checkbox(label="Hideout targets", value=config.getboolean('Aim', 'hideout_targets'), key="config_hideout_targets")
     disable_headshot = st.checkbox(label="Disable headshot", value=config.getboolean('Aim', 'disable_headshot'), key="config_disable_headshot")
     disable_prediction = st.checkbox(label="Disable prediction", value=config.getboolean('Aim', 'disable_prediction'), key="config_disable_prediction")
@@ -544,7 +544,7 @@ elif st.session_state.current_tab == "CONFIG":
         config.set('Aim', 'prediction_interval', str(prediction_interval))
         
     third_person = st.checkbox(label="Third person mode", value=config.getboolean('Aim', 'third_person'), key="config_third_person")
-    config.set('Aim', 'body_y_offset', str(body_y_offset))
+    config.set('Aim', 'aim_profile', str(aim_profile))
     config.set('Aim', 'hideout_targets', str(hideout_targets))
     config.set('Aim', 'disable_headshot', str(disable_headshot))
     config.set('Aim', 'third_person', str(third_person))

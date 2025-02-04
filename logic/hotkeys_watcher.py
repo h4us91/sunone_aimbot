@@ -53,7 +53,7 @@ class HotkeysWatcher(threading.Thread):
         clss = [0.0, 1.0]
         if cfg.hideout_targets:
             clss.extend([5.0, 6.0])
-        if not cfg.disable_headshot or cfg.body_y_offset == "head":
+        if not cfg.disable_headshot or cfg.aim_profile == "head":
             clss.append(7.0)
         if cfg.third_person:
             clss.append(10.0)
